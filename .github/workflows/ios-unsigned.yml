@@ -23,11 +23,9 @@ jobs:
           flutter --version
           flutter doctor -v
 
-      # 关键：先生成 ios/Flutter/Generated.xcconfig
       - name: Flutter pub get
         run: flutter pub get
 
-      # 可选但推荐：预拉 iOS 构建产物，避免首次构建下载卡住
       - name: Precache iOS artifacts
         run: flutter precache --ios
 
@@ -40,10 +38,35 @@ jobs:
           pod repo update
           pod install --repo-update
 
+      # 先用 Xcode 原生命令做一次“仅编译”，这样能把真正的第一条 error 打出来
+      - name: Xcode build (compile only, no codesign)
+        run: |
+          set -euxo pipefail
+          cd ios
+          xcodebuild -list -workspace Runner.xcworkspace
+          xcodebuild \
+            -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            COMPILER_INDEX_STORE_ENABLE=NO | tee ../xcodebuild.compile.log
+          cd ..
+      - name: Upload compile log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-compile-log
+          path: xcodebuild.compile.log
+
+      # 再用 Flutter 的官方打包命令产出无签名 IPA
       - name: Build IPA (no codesign)
         run: flutter build ipa --release --no-codesign -v
 
-      - name: Upload artifact
+      - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: tutu-unsigned-ipa
