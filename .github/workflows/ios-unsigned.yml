@@ -30,10 +30,10 @@ jobs:
         run: |
           rm -rf Payload && mkdir Payload
           cp -R build/ios/iphoneos/Runner.app Payload/
-          /usr/bin/zip -qry folder_gallery-unsigned.ipa Payload
+          /usr/bin/zip -qry tutu-unsigned.ipa Payload
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: folder_gallery-unsigned-ipa
-          path: folder_gallery-unsigned.ipa
+          name: tutu-unsigned-ipa
+          path: tutu-unsigned.ipa
