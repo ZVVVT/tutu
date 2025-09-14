@@ -57,12 +57,22 @@ class _GalleryPageState extends State<GalleryPage> {
     final root = rootPath;
     if (root == null) return;
     setState(() => loading = true);
-    final result = await scanMediaRecursively(root);
-    setState(() {
-      items = result;
-      loading = false;
-    });
+    try {
+      final result = await scanMediaRecursively(root);
+      if (!mounted) return;
+      setState(() {
+        items = result;
+        loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('读取失败：$e')),
+      );
+    }
   }
+
 
   @override
   void dispose() {
