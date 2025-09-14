@@ -18,10 +18,14 @@ class AppDelegate: FlutterAppDelegate, UIDocumentPickerDelegate {
     channel.setMethodCallHandler { [weak self] call, result in
       guard let self = self else { return }
       switch call.method {
-      case "pickFolder":       self.pickFolder(result: result)
-      case "restoreBookmark":  self.restoreBookmark(result: result)
-      case "releaseBookmark":  self.releaseBookmark(result: result)
-      default: result(FlutterMethodNotImplemented)
+      case "pickFolder":
+        self.pickFolder(result: result)
+      case "restoreBookmark":
+        self.restoreBookmark(result: result)
+      case "releaseBookmark":
+        self.releaseBookmark(result: result)
+      default:
+        result(FlutterMethodNotImplemented)
       }
     }
 
@@ -29,9 +33,10 @@ class AppDelegate: FlutterAppDelegate, UIDocumentPickerDelegate {
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
-  // MARK: - Pick folder and save bookmark (iOS 11+)
+  // MARK: - Pick folder and save bookmark (iOS 13+)
   private func pickFolder(result: @escaping FlutterResult) {
     flutterResult = result
+    // 兼容写法：使用 UTI 字符串选择“文件夹”
     let picker = UIDocumentPickerViewController(documentTypes: ["public.folder"], in: .open)
     picker.delegate = self
     picker.allowsMultipleSelection = false
@@ -41,11 +46,14 @@ class AppDelegate: FlutterAppDelegate, UIDocumentPickerDelegate {
 
   func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
     guard let url = urls.first else { flutterResult?(nil); flutterResult = nil; return }
+
+    // 临时进入安全域，创建书签
     let ok = url.startAccessingSecurityScopedResource()
     defer { if ok { url.stopAccessingSecurityScopedResource() } }
 
     do {
-      let data = try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+      // iOS 上不要用 .withSecurityScope（不可用）。用空 options 或 .minimalBookmark
+      let data = try url.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
       UserDefaults.standard.set(data, forKey: "rootFolderBookmark")
       flutterResult?(["path": url.path])
     } catch {
@@ -54,13 +62,19 @@ class AppDelegate: FlutterAppDelegate, UIDocumentPickerDelegate {
     flutterResult = nil
   }
 
-  // MARK: - Restore & release
+  // MARK: - Restore & hold access for scanning
   private func restoreBookmark(result: @escaping FlutterResult) {
-    guard let data = UserDefaults.standard.data(forKey: "rootFolderBookmark") else { result(nil); return }
+    guard let data = UserDefaults.standard.data(forKey: "rootFolderBookmark") else {
+      result(nil); return
+    }
     var stale = false
     do {
-      let url = try URL(resolvingBookmarkData: data, options: [.withSecurityScope], relativeTo: nil, bookmarkDataIsStale: &stale)
-      if stale { result(FlutterError(code: "BOOKMARK_STALE", message: "Bookmark is stale", details: nil)); return }
+      // 同样不要用 .withSecurityScope；用 .withoutUI 即可
+      let url = try URL(resolvingBookmarkData: data, options: [.withoutUI], relativeTo: nil, bookmarkDataIsStale: &stale)
+      if stale {
+        result(FlutterError(code: "BOOKMARK_STALE", message: "Bookmark is stale", details: nil))
+        return
+      }
       if url.startAccessingSecurityScopedResource() {
         currentAccessedURL = url
         result(url.path)
