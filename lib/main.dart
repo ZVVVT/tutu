@@ -39,10 +39,9 @@ class _HomePageState extends State<HomePage> {
 
   // —— UI 状态 ——
   final _scroll = ScrollController();
-  final GlobalKey _peekHeaderKey = GlobalKey(); // 窥视预览锚点
   bool _titleShowsPhotos = false; // true=“照片”，false=“图库”
 
-  // 列数仅允许 1 / 3 / 6
+  // 列数：仅 1 / 3 / 6
   static const _allowedCols = [1, 3, 6];
   int _cols = 6;
   bool _scaleChangedOnce = false;
@@ -92,21 +91,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _onScroll() {
-    if (!_personalizedEnabled) {
-      if (_titleShowsPhotos) setState(() => _titleShowsPhotos = false);
-      return;
-    }
-    final ctx = _peekHeaderKey.currentContext;
-    if (ctx == null) return;
-    final box = ctx.findRenderObject() as RenderBox?;
-    if (box == null || !box.attached) return;
-
-    final screenH = MediaQuery.of(context).size.height;
-    final dy = box.localToGlobal(Offset.zero).dy;
-    final visible = dy < screenH; // 露头即算进入“照片”段
-    if (visible != _titleShowsPhotos) {
-      setState(() => _titleShowsPhotos = visible);
-    }
+    // 标题切换：进入“照片区”（底部）即显示“照片”，否则“图库”
+    final offset = _scroll.offset;
+    setState(() => _titleShowsPhotos = offset > 20);
   }
 
   Future<void> _pickFolder() async {
@@ -193,12 +180,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _jumpToPersonalizedStart() {
-    final ctx = _peekHeaderKey.currentContext;
-    if (ctx == null) return;
-    final box = ctx.findRenderObject() as RenderBox?;
-    if (box == null || !box.attached) return;
-    final dy = box.localToGlobal(Offset.zero).dy;
-    _scroll.animateTo(_scroll.offset + dy - kToolbarHeight,
+    // 进入个性化区：滚动到页面底部附近
+    _scroll.animateTo(_scroll.position.maxScrollExtent,
         duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
   }
 
@@ -283,7 +266,7 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
 
-            // 照片网格 / 引导
+            // 照片区：使用 SliverFillRemaining，把网格“压到底部”（从下往上排）
             if (_loading)
               const SliverFillRemaining(
                 hasScrollBody: false,
@@ -306,30 +289,47 @@ class _HomePageState extends State<HomePage> {
                 child: Center(child: Text('没有符合筛选的媒体')),
               )
             else
-              SliverPadding(
-                // 关键：底部外边距为 0，让网格“贴着”后面的窥视预览
-                padding:
-                    const EdgeInsets.fromLTRB(6, 8, 6, 0),
-                sliver: SliverGrid.builder(
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: _cols,
-                    mainAxisSpacing: 6,
-                    crossAxisSpacing: 6,
-                  ),
-                  itemCount: _filteredItems.length,
-                  itemBuilder: (context, i) =>
-                      _GridTile(item: _filteredItems[i]),
-                ),
-              ),
-
-            // —— 照片区尾部“窥视预览”：minExtent=0，内容贴底对齐 —— //
-            if (_personalizedEnabled)
-              SliverPersistentHeader(
-                pinned: false,
-                floating: false,
-                delegate: _PeekHeader(
-                  onTap: _jumpToPersonalizedStart,
-                  containerKey: _peekHeaderKey,
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Column(
+                  children: [
+                    const Expanded(child: SizedBox()), // 把网格压到底部
+                    // 照片网格（外层用 GridView 但不滚动，交给外层 Sliver 滚动）
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(6, 8, 6, 0),
+                      child: GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate:
+                            SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: _cols,
+                          mainAxisSpacing: 6,
+                          crossAxisSpacing: 6,
+                        ),
+                        itemCount: _filteredItems.length,
+                        itemBuilder: (context, i) =>
+                            _GridTile(item: _filteredItems[i]),
+                      ),
+                    ),
+                    // 窥视预览（露头）：点击/上滑进入个性化区
+                    if (_personalizedEnabled)
+                      InkWell(
+                        onTap: _jumpToPersonalizedStart,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('更多项目',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium),
+                              const Icon(Icons.expand_more),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
 
@@ -346,9 +346,8 @@ class _HomePageState extends State<HomePage> {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                child: _CustomizeButton(
-                  onTap: () => _showCustomizeSheet(context),
-                ),
+                child:
+                    _CustomizeButton(onTap: () => _showCustomizeSheet(context)),
               ),
             ),
           ],
@@ -481,10 +480,10 @@ class _GridTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 关键：下对齐裁切
     return FutureBuilder<File?>(
       future: ThumbnailCache.getThumb(item, maxSize: 480),
       builder: (context, snap) {
-        // —— 关键：所有图片统一 bottomCenter 对齐，等效“下对齐”，贴近系统效果 —— //
         if (snap.hasData && snap.data != null) {
           return Image.file(
             snap.data!,
@@ -552,47 +551,4 @@ class _CustomizeButton extends StatelessWidget {
       label: const Text('自定义与重新排序'),
     );
   }
-}
-
-// —— 照片区尾部“窥视预览” header：minExtent=0，内容贴底 —— //
-class _PeekHeader extends SliverPersistentHeaderDelegate {
-  final VoidCallback onTap;
-  final GlobalKey containerKey;
-  _PeekHeader({required this.onTap, required this.containerKey});
-
-  @override
-  double get minExtent => 0;     // 不占空间时可完全贴合网格底部
-  @override
-  double get maxExtent => 160;   // 露出的高度（可微调）
-
-  @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    // shrinkOffset 0..(maxExtent-minExtent)
-    final t = maxExtent == 0 ? 1.0 : (shrinkOffset / (maxExtent - minExtent)).clamp(0.0, 1.0);
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Container(
-        key: containerKey, // 锚点：用于侦测是否“露头”
-        // 整个 header 的可用高度 = maxExtent - shrinkOffset
-        height: maxExtent - shrinkOffset,
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-        alignment: Alignment.bottomLeft, // ✨ 内容贴底
-        child: Opacity(
-          opacity: 1 - t, // 露头越少越清晰
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('更多项目', style: Theme.of(context).textTheme.titleMedium),
-              const Icon(Icons.expand_more),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  bool shouldRebuild(covariant _PeekHeader oldDelegate) => false;
 }
