@@ -39,7 +39,6 @@ class _HomePageState extends State<HomePage> {
   // —— UI 状态 ——
   final _scroll = ScrollController();
   final GlobalKey _peekHeaderKey = GlobalKey();
-  bool _titleShowsPhotos = false; // true=“照片”，false=“图库”
 
   // 列数：仅 1 / 3 / 6
   static const _allowedCols = [1, 3, 6];
@@ -67,7 +66,6 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _restorePrefs();
-    _scroll.addListener(_onScroll);
     _restoreRootAndScan();
   }
 
@@ -93,26 +91,8 @@ class _HomePageState extends State<HomePage> {
     if (!mounted) return;
     if (path != null && Directory(path).existsSync()) {
       setState(() => rootPath = path);
-      _anchoredOnce = false;      // 允许本次扫描后锚底
+      _anchoredOnce = false; // 允许本次扫描后锚底
       await _scan();
-    }
-  }
-
-  void _onScroll() {
-    if (!_personalizedEnabled) {
-      if (_titleShowsPhotos) setState(() => _titleShowsPhotos = false);
-      return;
-    }
-    final ctx = _peekHeaderKey.currentContext;
-    if (ctx == null) return;
-    final box = ctx.findRenderObject() as RenderBox?;
-    if (box == null || !box.attached) return;
-
-    final screenH = MediaQuery.of(context).size.height;
-    final dy = box.localToGlobal(Offset.zero).dy;
-    final visible = dy < screenH; // 露头即算“进入照片段”
-    if (visible != _titleShowsPhotos) {
-      setState(() => _titleShowsPhotos = visible);
     }
   }
 
@@ -121,7 +101,7 @@ class _HomePageState extends State<HomePage> {
     if (!mounted) return;
     if (path != null) {
       setState(() => rootPath = path);
-      _anchoredOnce = false;      // 选择新目录后，允许锚底
+      _anchoredOnce = false; // 选择新目录后，允许锚底
       await _scan();
     }
   }
@@ -137,7 +117,7 @@ class _HomePageState extends State<HomePage> {
         _items = result;
         _loading = false;
       });
-      _anchorToBottomOnce();      // 扫描结束 → 锚定到底部（仅一次）
+      _anchorToBottomOnce(); // 扫描结束 → 锚定到底部（仅一次）
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
@@ -154,9 +134,6 @@ class _HomePageState extends State<HomePage> {
       final target = _scroll.position.maxScrollExtent;
       if (target > 0) {
         _scroll.jumpTo(target); // 避免闪烁
-        if (_personalizedEnabled && !_titleShowsPhotos) {
-          setState(() => _titleShowsPhotos = true);
-        }
         _anchoredOnce = true;
       } else {
         _anchoredOnce = true; // 不足一屏也算完成
@@ -195,7 +172,7 @@ class _HomePageState extends State<HomePage> {
 
   void _onScaleUpdate(ScaleUpdateDetails d) {
     if (_scaleChangedOnce) return;
-    const upThreshold = 1.12;   // 放大：列数减小
+    const upThreshold = 1.12; // 放大：列数减小
     const downThreshold = 0.88; // 缩小：列数增大
     final s = d.scale;
     final idx = _allowedCols.indexOf(_cols);
@@ -240,8 +217,8 @@ class _HomePageState extends State<HomePage> {
   // —— UI —— //
   @override
   Widget build(BuildContext context) {
-    final titleText =
-        _personalizedEnabled ? (_titleShowsPhotos ? '照片' : '图库') : '图库';
+    // 标题固定“图库”，滚动不再切换，避免闪变
+    const titleText = '图库';
 
     final imageCount = _items.where((e) => !e.isVideo).length;
     final videoCount = _items.where((e) => e.isVideo).length;
@@ -414,8 +391,8 @@ class _HomePageState extends State<HomePage> {
                     onPressed: () {
                       Navigator.pop(ctx);
                       _setPersonalizedEnabled(enabled);
-                      _anchoredOnce = false;    // 重置一次性标记
-                      _anchorToBottomOnce();    // 开场即到底（统一体验）
+                      _anchoredOnce = false; // 重置一次性标记
+                      _anchorToBottomOnce(); // 开场即到底（统一体验）
                     },
                     child: const Text('完成'),
                   ),
@@ -545,12 +522,12 @@ class _PeekHeader extends SliverPersistentHeaderDelegate {
   bool shouldRebuild(covariant _PeekHeader oldDelegate) => false;
 }
 
-/// 顶部大标题（毛玻璃 + 渐变；副标题贴大标题下，仅展开态可见；始终左对齐不跳位）
+/// 顶部大标题（毛玻璃 + 渐变；副标题贴大标题下，仅展开态可见；始终左对齐不跳位；无分割线）
 class PhotosHeaderDelegate extends SliverPersistentHeaderDelegate {
   final String title;
-  final String subtitle;         // 统计小字（展开时显示，收起淡出）
-  final double topPadding;       // 安全区
-  final Color backgroundColor;   // 适配明暗色
+  final String subtitle; // 统计小字（展开时显示，收起淡出）
+  final double topPadding; // 安全区
+  final Color backgroundColor; // 适配明暗色
 
   PhotosHeaderDelegate({
     required this.title,
@@ -560,18 +537,18 @@ class PhotosHeaderDelegate extends SliverPersistentHeaderDelegate {
   });
 
   @override
-  double get minExtent => topPadding + 56;   // 收起高度
+  double get minExtent => topPadding + 56; // 收起高度
   @override
-  double get maxExtent => topPadding + 120;  // 展开高度
+  double get maxExtent => topPadding + 120; // 展开高度
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
     final d = (maxExtent - minExtent);
     final t = (d <= 0) ? 1.0 : (shrinkOffset / d).clamp(0.0, 1.0);
 
-    final double titleFont = ui.lerpDouble(32, 20, t)!;        // 大->小
-    final double titleTop  = topPadding + ui.lerpDouble(18, 8, t)!; // 轻微上移
-    final double subtitleOpacity = 1 - t;                       // 仅展开时可见
+    final double titleFont = ui.lerpDouble(32, 20, t)!; // 大->小
+    final double titleTop = topPadding + ui.lerpDouble(18, 8, t)!; // 轻微上移
+    final double subtitleOpacity = 1 - t; // 仅展开时可见
 
     return Stack(
       fit: StackFit.expand,
@@ -637,13 +614,7 @@ class PhotosHeaderDelegate extends SliverPersistentHeaderDelegate {
             ],
           ),
         ),
-        // 底部分割线（很淡）
-        const Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          child: Divider(height: 0.5, thickness: 0.5),
-        ),
+        // ✅ 去掉分割线：不再绘制底部 Divider
       ],
     );
   }
