@@ -1,8 +1,6 @@
 import 'dart:io';
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show HapticFeedback; // 触感反馈
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'services/folder_access.dart';
@@ -34,25 +32,22 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  // ---------- persistent keys ----------
+  // —— 持久化 key ——
   static const _kGridColsKey = 'tutu.grid.columns';
   static const _kPersonalizedEnabledKey = 'tutu.personalized.enabled';
   static const _kFilterKey = 'tutu.filter';
 
-  // ---------- ui states ----------
+  // —— UI 状态 ——
   final _scroll = ScrollController();
   final GlobalKey _peekHeaderKey = GlobalKey(); // 窥视预览锚点
   bool _titleShowsPhotos = false; // true=“照片”，false=“图库”
 
-  // 网格列数：只允许 1/3/6
+  // 列数仅允许 1 / 3 / 6
   static const _allowedCols = [1, 3, 6];
-  int _cols = 6; // 默认 6 列
-  bool _scaleChangedOnce = false; // 一次捏合手势只切一次档位
+  int _cols = 6;
+  bool _scaleChangedOnce = false;
 
-  // 个性化容器开关（关闭=仅图库）
   bool _personalizedEnabled = true;
-
-  // 过滤
   MediaFilter _filter = MediaFilter.all;
 
   // 数据
@@ -69,20 +64,19 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _restorePrefs() async {
-    final prefs = await SharedPreferences.getInstance();
+    final p = await SharedPreferences.getInstance();
     setState(() {
-      _cols = _normalizeCols(prefs.getInt(_kGridColsKey) ?? 6);
-      _personalizedEnabled = prefs.getBool(_kPersonalizedEnabledKey) ?? true;
-      _filter = MediaFilter
-          .values[(prefs.getInt(_kFilterKey) ?? 0).clamp(0, MediaFilter.values.length - 1)];
+      _cols = _normalizeCols(p.getInt(_kGridColsKey) ?? 6);
+      _personalizedEnabled = p.getBool(_kPersonalizedEnabledKey) ?? true;
+      _filter = MediaFilter.values[(p.getInt(_kFilterKey) ?? 0)
+          .clamp(0, MediaFilter.values.length - 1)];
     });
   }
 
   int _normalizeCols(int v) {
     if (_allowedCols.contains(v)) return v;
-    final sorted = List<int>.from(_allowedCols)..sort();
-    int nearest = sorted.first;
-    for (final c in sorted) {
+    int nearest = _allowedCols.first;
+    for (final c in _allowedCols) {
       if ((v - c).abs() < (v - nearest).abs()) nearest = c;
     }
     return nearest;
@@ -108,8 +102,8 @@ class _HomePageState extends State<HomePage> {
     if (box == null || !box.attached) return;
 
     final screenH = MediaQuery.of(context).size.height;
-    final dy = box.localToGlobal(Offset.zero).dy; // 窥视预览顶端相对屏幕的 y
-    final visible = dy < screenH; // 只要露头了就当“照片”
+    final dy = box.localToGlobal(Offset.zero).dy;
+    final visible = dy < screenH; // 露头即算进入“照片”段
     if (visible != _titleShowsPhotos) {
       setState(() => _titleShowsPhotos = visible);
     }
@@ -146,18 +140,18 @@ class _HomePageState extends State<HomePage> {
 
   List<MediaItem> get _filteredItems {
     return _items.where((it) {
-      final path = it.path.toLowerCase();
+      final p = it.path.toLowerCase();
       switch (_filter) {
         case MediaFilter.all:
           return true;
         case MediaFilter.image:
-          return !it.isVideo && !_isRaw(path) && !_isHeic(path);
+          return !it.isVideo && !_isRaw(p) && !_isHeic(p);
         case MediaFilter.video:
           return it.isVideo;
         case MediaFilter.raw:
-          return !it.isVideo && _isRaw(path);
+          return !it.isVideo && _isRaw(p);
         case MediaFilter.heic:
-          return !it.isVideo && _isHeic(path);
+          return !it.isVideo && _isHeic(p);
       }
     }).toList();
   }
@@ -177,20 +171,20 @@ class _HomePageState extends State<HomePage> {
     final nv = _normalizeCols(v);
     if (nv == _cols) return;
     setState(() => _cols = nv);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_kGridColsKey, nv);
+    final p = await SharedPreferences.getInstance();
+    await p.setInt(_kGridColsKey, nv);
   }
 
   Future<void> _setFilter(MediaFilter f) async {
     setState(() => _filter = f);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_kFilterKey, f.index);
+    final p = await SharedPreferences.getInstance();
+    await p.setInt(_kFilterKey, f.index);
   }
 
   Future<void> _setPersonalizedEnabled(bool enabled) async {
     setState(() => _personalizedEnabled = enabled);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_kPersonalizedEnabledKey, enabled);
+    final p = await SharedPreferences.getInstance();
+    await p.setBool(_kPersonalizedEnabledKey, enabled);
   }
 
   void _jumpToPhotosStart() {
@@ -204,24 +198,20 @@ class _HomePageState extends State<HomePage> {
     final box = ctx.findRenderObject() as RenderBox?;
     if (box == null || !box.attached) return;
     final dy = box.localToGlobal(Offset.zero).dy;
-    _scroll.animateTo(
-      _scroll.offset + dy - kToolbarHeight,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOutCubic,
-    );
+    _scroll.animateTo(_scroll.offset + dy - kToolbarHeight,
+        duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
   }
 
-  // 捏合：一次手势只切一次档位（更像系统）
+  // 捏合列数：一次手势只切一次档位
   void _onScaleStart(ScaleStartDetails d) {
     _scaleChangedOnce = false;
   }
 
   void _onScaleUpdate(ScaleUpdateDetails d) {
     if (_scaleChangedOnce) return;
-    const upThreshold = 1.12; // 放大 => 更少列
-    const downThreshold = 0.88; // 缩小 => 更多列
+    const upThreshold = 1.12;   // 放大：列数减小
+    const downThreshold = 0.88; // 缩小：列数增大
     final s = d.scale;
-
     final idx = _allowedCols.indexOf(_cols);
     if (s >= upThreshold && idx > 0) {
       _scaleChangedOnce = true;
@@ -245,7 +235,7 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  // ------------------------- UI -------------------------
+  // —— UI ——
   @override
   Widget build(BuildContext context) {
     final titleText =
@@ -259,7 +249,7 @@ class _HomePageState extends State<HomePage> {
         body: CustomScrollView(
           controller: _scroll,
           slivers: [
-            // 只有 FlexibleSpaceBar 的大标题（避免重复标题）
+            // 只保留 FlexibleSpaceBar，避免重复标题
             SliverAppBar(
               pinned: true,
               expandedHeight: 112,
@@ -272,7 +262,7 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
 
-            // 统计/筛选 Chips
+            // 统计 + 筛选
             SliverToBoxAdapter(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -288,10 +278,7 @@ class _HomePageState extends State<HomePage> {
                             ?.copyWith(color: Colors.grey[600]),
                       ),
                     ),
-                  _FilterChips(
-                    value: _filter,
-                    onChanged: _setFilter,
-                  ),
+                  _FilterChips(value: _filter, onChanged: _setFilter),
                 ],
               ),
             ),
@@ -320,8 +307,9 @@ class _HomePageState extends State<HomePage> {
               )
             else
               SliverPadding(
+                // 关键：底部外边距为 0，让网格“贴着”后面的窥视预览
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                    const EdgeInsets.fromLTRB(6, 8, 6, 0),
                 sliver: SliverGrid.builder(
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: _cols,
@@ -334,7 +322,7 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
 
-            // —— 照片网格尾部的 “窥视预览” —— 露出个性化上缘
+            // —— 照片区尾部“窥视预览”：minExtent=0，内容贴底对齐 —— //
             if (_personalizedEnabled)
               SliverPersistentHeader(
                 pinned: false,
@@ -345,18 +333,16 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
 
-            // 个性化区：选择目录/相册卡片
+            // 个性化区：先提供“选择目录/相册”卡片
             if (_personalizedEnabled)
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 sliver: SliverList.list(children: [
-                  _ChooseSourceCard(
-                    onTap: () => _showChooseSheet(context),
-                  ),
+                  _ChooseSourceCard(onTap: () => _showChooseSheet(context)),
                 ]),
               ),
 
-            // —— 自定义与重新排序：始终可见（即使隐藏个性化区） ——
+            // “自定义与重新排序”：始终显示
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -452,7 +438,7 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-// ---------- widgets ----------
+// —— 小部件 —— //
 
 class _FilterChips extends StatelessWidget {
   final MediaFilter value;
@@ -498,32 +484,23 @@ class _GridTile extends StatelessWidget {
     return FutureBuilder<File?>(
       future: ThumbnailCache.getThumb(item, maxSize: 480),
       builder: (context, snap) {
-        Widget child;
+        // —— 关键：所有图片统一 bottomCenter 对齐，等效“下对齐”，贴近系统效果 —— //
         if (snap.hasData && snap.data != null) {
-          child = Image.file(snap.data!, fit: BoxFit.cover);
-        } else {
-          if (!item.isVideo) {
-            child = Image.file(
-              File(item.path),
-              fit: BoxFit.cover,
-              cacheWidth: 480,
-            );
-          } else {
-            child = const ColoredBox(color: Colors.black12);
-          }
+          return Image.file(
+            snap.data!,
+            fit: BoxFit.cover,
+            alignment: Alignment.bottomCenter,
+          );
         }
-
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            child,
-            if (item.isVideo)
-              const Align(
-                alignment: Alignment.center,
-                child: Icon(Icons.play_circle_outline, size: 28),
-              ),
-          ],
-        );
+        if (!item.isVideo) {
+          return Image.file(
+            File(item.path),
+            fit: BoxFit.cover,
+            alignment: Alignment.bottomCenter,
+            cacheWidth: 480,
+          );
+        }
+        return const ColoredBox(color: Colors.black12);
       },
     );
   }
@@ -577,29 +554,33 @@ class _CustomizeButton extends StatelessWidget {
   }
 }
 
-// —— 照片区尾部的“窥视预览”header（露出个性化上缘） ——
+// —— 照片区尾部“窥视预览” header：minExtent=0，内容贴底 —— //
 class _PeekHeader extends SliverPersistentHeaderDelegate {
   final VoidCallback onTap;
   final GlobalKey containerKey;
   _PeekHeader({required this.onTap, required this.containerKey});
 
   @override
-  double get minExtent => 24; // 最小只留一点空隙
+  double get minExtent => 0;     // 不占空间时可完全贴合网格底部
   @override
-  double get maxExtent => 160; // 露出的高度
+  double get maxExtent => 160;   // 露出的高度（可微调）
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    final t = (shrinkOffset / (maxExtent - minExtent)).clamp(0.0, 1.0);
+    // shrinkOffset 0..(maxExtent-minExtent)
+    final t = maxExtent == 0 ? 1.0 : (shrinkOffset / (maxExtent - minExtent)).clamp(0.0, 1.0);
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        key: containerKey, // 作为锚点用来判断“是否露头”
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-        alignment: Alignment.bottomLeft,
+        key: containerKey, // 锚点：用于侦测是否“露头”
+        // 整个 header 的可用高度 = maxExtent - shrinkOffset
+        height: maxExtent - shrinkOffset,
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        alignment: Alignment.bottomLeft, // ✨ 内容贴底
         child: Opacity(
-          opacity: 1 - t,
+          opacity: 1 - t, // 露头越少越清晰
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
