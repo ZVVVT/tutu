@@ -1,6 +1,6 @@
-# folder_gallery
+# Tutu
 
-A new Flutter project.
+Folder-based photo viewer.
 
 ## Getting Started
 
