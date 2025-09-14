@@ -1,195 +1,151 @@
-import 'dart:async';
-import 'dart:typed_data';
-import 'dart:io' as io show File; // 仅在非 Web 平台会实际使用
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'folder_bridge.dart';
+import 'services/folder_access.dart';
+import 'services/media_scanner.dart';
+import 'services/thumbnail_cache.dart';
 
-void main() => runApp(const TutuApp());
+void main() {
+  runApp(const TutuApp());
+}
 
 class TutuApp extends StatelessWidget {
   const TutuApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Tutu',
-      theme: ThemeData(
-        colorSchemeSeed: const Color(0xFF7C4DFF),
-        useMaterial3: true,
-      ),
-      home: const FolderGalleryPage(),
-      debugShowCheckedModeBanner: false,
+      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.blue),
+      home: const GalleryPage(),
     );
   }
 }
 
-class FolderGalleryPage extends StatefulWidget {
-  const FolderGalleryPage({super.key});
-
+class GalleryPage extends StatefulWidget {
+  const GalleryPage({super.key});
   @override
-  State<FolderGalleryPage> createState() => _FolderGalleryPageState();
+  State<GalleryPage> createState() => _GalleryPageState();
 }
 
-class _FolderGalleryPageState extends State<FolderGalleryPage> {
-  String? _folderName;
-  String? _folderPath;
-  List<String> _paths = [];
-  StreamSubscription? _sub;
-  bool _loading = false;
+class _GalleryPageState extends State<GalleryPage> {
+  String? rootPath;
+  List<MediaItem> items = [];
+  bool loading = false;
 
   @override
   void initState() {
     super.initState();
     _restore();
-    // iOS 下监听原生目录变化；Web/其他平台返回空流
-    _sub = TutuFolderBridge.changes().listen((_) => _reload());
-  }
-
-  @override
-  void dispose() {
-    _sub?.cancel();
-    super.dispose();
   }
 
   Future<void> _restore() async {
-    final f = await TutuFolderBridge.currentFolder();
-    if (f != null) {
-      setState(() {
-        _folderName = f['name'];
-        _folderPath = f['path'];
-      });
-      _reload();
+    final path = await FolderAccess.restoreRoot();
+    if (path != null && Directory(path).existsSync()) {
+      setState(() => rootPath = path);
+      await _scan();
     }
   }
 
   Future<void> _pickFolder() async {
-    final f = await TutuFolderBridge.selectFolder();
-    if (f == null) return; // Web/非 iOS 会直接返回 null
-    setState(() {
-      _folderName = f['name'];
-      _folderPath = f['path'];
-    });
-    await _reload();
+    final path = await FolderAccess.pickRoot();
+    if (path != null) {
+      setState(() => rootPath = path);
+      await _scan();
+    }
   }
 
-  Future<void> _reload() async {
-    if (_folderPath == null) return;
-    if (_loading) return;
-    setState(() => _loading = true);
-    final rows = await TutuFolderBridge.listImages(); // Web/非 iOS 返回 []
+  Future<void> _scan() async {
+    final root = rootPath;
+    if (root == null) return;
+    setState(() => loading = true);
+    final result = await scanMediaRecursively(root);
     setState(() {
-      _paths = rows.map((e) => e['path'] as String).toList();
-      _loading = false;
+      items = result;
+      loading = false;
     });
   }
 
   @override
+  void dispose() {
+    FolderAccess.releaseAccess();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final title = _folderName == null ? '图图 · 选择文件夹' : '图图 · $_folderName';
+    final hasRoot = rootPath != null;
     return Scaffold(
       appBar: AppBar(
-        title: Text(title),
+        title: Text(hasRoot ? (rootPath!.split('/').last.isEmpty ? rootPath! : rootPath!.split('/').last) : '选择根目录'),
         actions: [
-          IconButton(
-            tooltip: '选择文件夹',
-            onPressed: _pickFolder,
-            icon: const Icon(Icons.folder_open),
-          ),
-          if (_folderPath != null)
-            IconButton(
-              tooltip: '刷新',
-              onPressed: _reload,
-              icon: const Icon(Icons.refresh),
-            ),
+          if (hasRoot) IconButton(onPressed: _scan, icon: const Icon(Icons.refresh)),
+          IconButton(onPressed: _pickFolder, icon: const Icon(Icons.folder_open)),
         ],
       ),
-      body: _folderPath == null
-          ? const _EmptyHint()
-          : _loading
+      body: !hasRoot
+          ? Center(
+              child: FilledButton.icon(
+                onPressed: _pickFolder,
+                icon: const Icon(Icons.folder_open),
+                label: const Text('选择照片根目录'),
+              ),
+            )
+          : loading
               ? const Center(child: CircularProgressIndicator())
-              : _paths.isEmpty
-                  ? const _EmptyFolderHint()
+              : items.isEmpty
+                  ? const Center(child: Text('空空如也，换个目录试试～'))
                   : GridView.builder(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(6),
                       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 3,
-                        mainAxisSpacing: 8,
-                        crossAxisSpacing: 8,
+                        mainAxisSpacing: 6,
+                        crossAxisSpacing: 6,
                       ),
-                      itemCount: _paths.length,
-                      itemBuilder: (context, i) => _ImageTile(path: _paths[i]),
+                      itemCount: items.length,
+                      itemBuilder: (context, i) => _GridTile(item: items[i]),
                     ),
-      floatingActionButton: _folderPath == null
-          ? FloatingActionButton.extended(
-              onPressed: _pickFolder,
-              label: const Text('选择文件夹'),
-              icon: const Icon(Icons.add),
-            )
-          : null,
     );
   }
 }
 
-class _EmptyHint extends StatelessWidget {
-  const _EmptyHint();
+class _GridTile extends StatelessWidget {
+  final MediaItem item;
+  const _GridTile({required this.item});
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Text(
-        '点右上角“选择文件夹”\n像系统照片一样预览该文件夹中的图片',
-        textAlign: TextAlign.center,
-        style: Theme.of(context).textTheme.titleMedium,
-      ),
-    );
-  }
-}
+    return FutureBuilder<File?>(
+      future: ThumbnailCache.getThumb(item, maxSize: 480),
+      builder: (context, snap) {
+        Widget child;
 
-class _EmptyFolderHint extends StatelessWidget {
-  const _EmptyFolderHint();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text(
-        '这个文件夹里没有可预览的图片\n支持：jpg/jpeg/png/gif/webp/bmp/heic/heif',
-        textAlign: TextAlign.center,
-        style: Theme.of(context).textTheme.titleMedium,
-      ),
-    );
-  }
-}
-
-class _ImageTile extends StatelessWidget {
-  const _ImageTile({required this.path});
-  final String path;
-
-  Future<Uint8List> _bytes() async {
-    if (kIsWeb) return Uint8List(0); // Web：不读取本地文件，返回空占位
-    return io.File(path).readAsBytes();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: FutureBuilder<Uint8List>(
-        future: _bytes(),
-        builder: (context, snap) {
-          if (snap.connectionState != ConnectionState.done) {
-            return const ColoredBox(color: Color(0x11000000));
+        if (snap.hasData && snap.data != null) {
+          child = Image.file(snap.data!, fit: BoxFit.cover);
+        } else {
+          // 缩略图尚无：用原图/视频占位（图像：用cacheWidth减压；视频：图标）
+          if (!item.isVideo) {
+            child = Image.file(
+              File(item.path),
+              fit: BoxFit.cover,
+              // 重要：降低原图解码尺寸，避免巨图卡顿/爆内存
+              cacheWidth: 480,
+            );
+          } else {
+            child = const ColoredBox(color: Colors.black12);
           }
-          if (!snap.hasData || snap.data!.isEmpty) {
-            return const Center(child: Icon(Icons.broken_image_outlined));
-          }
-          return Image.memory(
-            snap.data!,
-            fit: BoxFit.cover,
-            filterQuality: FilterQuality.low,
-          );
-        },
-      ),
+        }
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            child,
+            if (item.isVideo)
+              const Align(
+                alignment: Alignment.center,
+                child: Icon(Icons.play_circle_outline, size: 36),
+              ),
+          ],
+        );
+      },
     );
   }
 }
