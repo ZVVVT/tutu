@@ -62,6 +62,9 @@ class _HomePageState extends State<HomePage> {
   static const double _gridCrossSpacing = 6;
   static const double _peekMinExtent = 28; // 露头高度
 
+  // —— “一次性锚底”标记 ——（每次数据源变动会重置）
+  bool _anchoredOnce = false;
+
   @override
   void initState() {
     super.initState();
@@ -74,7 +77,7 @@ class _HomePageState extends State<HomePage> {
     final p = await SharedPreferences.getInstance();
     final rawFilter = p.getInt(_kFilterKey) ?? 0;
     final clampedIndex =
-        rawFilter.clamp(0, MediaFilter.values.length - 1).toInt(); // <- 修正：同一条链并转 int
+        rawFilter.clamp(0, MediaFilter.values.length - 1).toInt(); // 类型安全
     setState(() {
       _cols = _normalizeCols(p.getInt(_kGridColsKey) ?? 6);
       _personalizedEnabled = p.getBool(_kPersonalizedEnabledKey) ?? true;
@@ -96,6 +99,7 @@ class _HomePageState extends State<HomePage> {
     if (!mounted) return;
     if (path != null && Directory(path).existsSync()) {
       setState(() => rootPath = path);
+      _anchoredOnce = false;      // 允许本次扫描后锚底
       await _scan();
     }
   }
@@ -123,8 +127,8 @@ class _HomePageState extends State<HomePage> {
     if (!mounted) return;
     if (path != null) {
       setState(() => rootPath = path);
+      _anchoredOnce = false;      // 选择新目录后，允许锚底
       await _scan();
-      _jumpToPhotosStart();
     }
   }
 
@@ -139,12 +143,32 @@ class _HomePageState extends State<HomePage> {
         _items = result;
         _loading = false;
       });
+      _anchorToBottomOnce();      // 扫描结束 → 锚定到底部（仅一次）
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('读取失败：$e')));
     }
+  }
+
+  // —— 首次构建完成后锚定到底（只执行一次）——
+  void _anchorToBottomOnce() {
+    if (_anchoredOnce) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      final target = _scroll.position.maxScrollExtent;
+      if (target > 0) {
+        _scroll.jumpTo(target); // 避免闪烁
+        if (_personalizedEnabled && !_titleShowsPhotos) {
+          setState(() => _titleShowsPhotos = true);
+        }
+        _anchoredOnce = true;
+      } else {
+        // 不足一屏，无需滚动，也算完成一次锚底
+        _anchoredOnce = true;
+      }
+    });
   }
 
   List<MediaItem> get _filteredItems {
@@ -334,7 +358,7 @@ class _HomePageState extends State<HomePage> {
                     final gridH = _gridHeight(cross, _filteredItems.length);
                     final topPad = (remaining - (gridH + _peekMinExtent))
                         .clamp(0.0, double.infinity)
-                        .toDouble(); // <- 修正：强转 double
+                        .toDouble(); // 类型安全
                     return SliverToBoxAdapter(child: SizedBox(height: topPad));
                   },
                 ),
@@ -452,12 +476,8 @@ class _HomePageState extends State<HomePage> {
                     onPressed: () {
                       Navigator.pop(ctx);
                       _setPersonalizedEnabled(enabled);
-                      if (enabled) {
-                        Future.delayed(const Duration(milliseconds: 120),
-                            _jumpToPersonalizedStart);
-                      } else {
-                        _jumpToPhotosStart();
-                      }
+                      _anchoredOnce = false;    // 重置一次性标记
+                      _anchorToBottomOnce();    // 开场即到底（统一体验）
                     },
                     child: const Text('完成'),
                   ),
