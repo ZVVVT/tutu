@@ -2,13 +2,12 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback; // 触感反馈
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'services/folder_access.dart';
 import 'services/media_scanner.dart';
 import 'services/thumbnail_cache.dart';
-import 'package:flutter/services.dart' show HapticFeedback;
-
 
 void main() {
   runApp(const TutuApp());
@@ -42,8 +41,8 @@ class _HomePageState extends State<HomePage> {
 
   // ---------- ui states ----------
   final _scroll = ScrollController();
-  final _personalizedAnchorKey = GlobalKey(); // 标记个性化起点
-  bool _titleShowsPhotos = false;             // “照片” or “图库”
+  final GlobalKey _peekHeaderKey = GlobalKey(); // 窥视预览锚点
+  bool _titleShowsPhotos = false; // true=“照片”，false=“图库”
 
   // 网格列数：只允许 1/3/6
   static const _allowedCols = [1, 3, 6];
@@ -74,13 +73,13 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _cols = _normalizeCols(prefs.getInt(_kGridColsKey) ?? 6);
       _personalizedEnabled = prefs.getBool(_kPersonalizedEnabledKey) ?? true;
-      _filter = MediaFilter.values[(prefs.getInt(_kFilterKey) ?? 0).clamp(0, MediaFilter.values.length - 1)];
+      _filter = MediaFilter
+          .values[(prefs.getInt(_kFilterKey) ?? 0).clamp(0, MediaFilter.values.length - 1)];
     });
   }
 
   int _normalizeCols(int v) {
     if (_allowedCols.contains(v)) return v;
-    // 兜底：就近选择
     final sorted = List<int>.from(_allowedCols)..sort();
     int nearest = sorted.first;
     for (final c in sorted) {
@@ -103,14 +102,14 @@ class _HomePageState extends State<HomePage> {
       if (_titleShowsPhotos) setState(() => _titleShowsPhotos = false);
       return;
     }
-    final ctx = _personalizedAnchorKey.currentContext;
+    final ctx = _peekHeaderKey.currentContext;
     if (ctx == null) return;
     final box = ctx.findRenderObject() as RenderBox?;
     if (box == null || !box.attached) return;
 
     final screenH = MediaQuery.of(context).size.height;
-    final dy = box.localToGlobal(Offset.zero).dy; // 个性化起点相对屏幕顶端的 y
-    final visible = dy < screenH; // 进入视口
+    final dy = box.localToGlobal(Offset.zero).dy; // 窥视预览顶端相对屏幕的 y
+    final visible = dy < screenH; // 只要露头了就当“照片”
     if (visible != _titleShowsPhotos) {
       setState(() => _titleShowsPhotos = visible);
     }
@@ -122,8 +121,7 @@ class _HomePageState extends State<HomePage> {
     if (path != null) {
       setState(() => rootPath = path);
       await _scan();
-      // 回到照片起点
-      _scroll.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+      _jumpToPhotosStart();
     }
   }
 
@@ -141,12 +139,12 @@ class _HomePageState extends State<HomePage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('读取失败：$e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('读取失败：$e')));
     }
   }
 
   List<MediaItem> get _filteredItems {
-    // 根据 _filter 过滤
     return _items.where((it) {
       final path = it.path.toLowerCase();
       switch (_filter) {
@@ -166,8 +164,14 @@ class _HomePageState extends State<HomePage> {
 
   bool _isHeic(String p) => p.endsWith('.heic') || p.endsWith('.heif');
   bool _isRaw(String p) =>
-      p.endsWith('.raw') || p.endsWith('.dng') || p.endsWith('.cr2') || p.endsWith('.cr3') ||
-      p.endsWith('.arw') || p.endsWith('.nef') || p.endsWith('.raf') || p.endsWith('.nrw');
+      p.endsWith('.raw') ||
+      p.endsWith('.dng') ||
+      p.endsWith('.cr2') ||
+      p.endsWith('.cr3') ||
+      p.endsWith('.arw') ||
+      p.endsWith('.nef') ||
+      p.endsWith('.raf') ||
+      p.endsWith('.nrw');
 
   Future<void> _setCols(int v) async {
     final nv = _normalizeCols(v);
@@ -190,18 +194,21 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _jumpToPhotosStart() {
-    _scroll.animateTo(0, duration: const Duration(milliseconds: 260), curve: Curves.easeOutCubic);
+    _scroll.animateTo(0,
+        duration: const Duration(milliseconds: 260), curve: Curves.easeOutCubic);
   }
 
   void _jumpToPersonalizedStart() {
-    // 个性化锚点对齐到顶部
-    final ctx = _personalizedAnchorKey.currentContext;
+    final ctx = _peekHeaderKey.currentContext;
     if (ctx == null) return;
     final box = ctx.findRenderObject() as RenderBox?;
     if (box == null || !box.attached) return;
     final dy = box.localToGlobal(Offset.zero).dy;
-    _scroll.animateTo(_scroll.offset + dy - kToolbarHeight,
-        duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
+    _scroll.animateTo(
+      _scroll.offset + dy - kToolbarHeight,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   // 捏合：一次手势只切一次档位（更像系统）
@@ -211,18 +218,18 @@ class _HomePageState extends State<HomePage> {
 
   void _onScaleUpdate(ScaleUpdateDetails d) {
     if (_scaleChangedOnce) return;
-    const upThreshold = 1.12;   // 放大（更少列）
-    const downThreshold = 0.88; // 缩小（更多列）
+    const upThreshold = 1.12; // 放大 => 更少列
+    const downThreshold = 0.88; // 缩小 => 更多列
     final s = d.scale;
 
     final idx = _allowedCols.indexOf(_cols);
     if (s >= upThreshold && idx > 0) {
       _scaleChangedOnce = true;
-      _setCols(_allowedCols[idx - 1]); // fewer columns
+      _setCols(_allowedCols[idx - 1]);
       HapticFeedback.selectionClick();
     } else if (s <= downThreshold && idx < _allowedCols.length - 1) {
       _scaleChangedOnce = true;
-      _setCols(_allowedCols[idx + 1]); // more columns
+      _setCols(_allowedCols[idx + 1]);
       HapticFeedback.selectionClick();
     }
   }
@@ -241,12 +248,10 @@ class _HomePageState extends State<HomePage> {
   // ------------------------- UI -------------------------
   @override
   Widget build(BuildContext context) {
-    final titleText = _personalizedEnabled
-        ? (_titleShowsPhotos ? '照片' : '图库')
-        : '图库';
+    final titleText =
+        _personalizedEnabled ? (_titleShowsPhotos ? '照片' : '图库') : '图库';
 
     return GestureDetector(
-      // 两指缩放控制列数
       onScaleStart: _onScaleStart,
       onScaleUpdate: _onScaleUpdate,
       onScaleEnd: _onScaleEnd,
@@ -254,17 +259,16 @@ class _HomePageState extends State<HomePage> {
         body: CustomScrollView(
           controller: _scroll,
           slivers: [
+            // 只有 FlexibleSpaceBar 的大标题（避免重复标题）
             SliverAppBar(
               pinned: true,
-              expandedHeight: 96,
-              title: Text(titleText),
-              actions: const [
-                // 占位：搜索/选择/头像（后续再接）
-              ],
+              expandedHeight: 112,
               flexibleSpace: FlexibleSpaceBar(
-                stretchModes: const [StretchMode.fadeTitle],
-                titlePadding: const EdgeInsetsDirectional.only(start: 16, bottom: 12),
-                title: Text('$titleText', style: const TextStyle(fontSize: 20)),
+                collapseMode: CollapseMode.pin,
+                expandedTitleScale: 1.6,
+                titlePadding:
+                    const EdgeInsetsDirectional.only(start: 16, bottom: 12),
+                title: Text(titleText),
               ),
             ),
 
@@ -278,7 +282,10 @@ class _HomePageState extends State<HomePage> {
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                       child: Text(
                         '${_items.where((e) => !e.isVideo).length} 张照片 · ${_items.where((e) => e.isVideo).length} 个视频',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: Colors.grey[600]),
                       ),
                     ),
                   _FilterChips(
@@ -289,7 +296,7 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
 
-            // 照片网格
+            // 照片网格 / 引导
             if (_loading)
               const SliverFillRemaining(
                 hasScrollBody: false,
@@ -313,7 +320,8 @@ class _HomePageState extends State<HomePage> {
               )
             else
               SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                 sliver: SliverGrid.builder(
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: _cols,
@@ -321,34 +329,23 @@ class _HomePageState extends State<HomePage> {
                     crossAxisSpacing: 6,
                   ),
                   itemCount: _filteredItems.length,
-                  itemBuilder: (context, i) => _GridTile(item: _filteredItems[i]),
+                  itemBuilder: (context, i) =>
+                      _GridTile(item: _filteredItems[i]),
                 ),
               ),
 
-            // “更多项目 >” （充当窥视预览的引导；点击跳到个性化起点）
+            // —— 照片网格尾部的 “窥视预览” —— 露出个性化上缘
             if (_personalizedEnabled)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(10),
-                    onTap: _jumpToPersonalizedStart,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('更多项目', style: Theme.of(context).textTheme.titleMedium),
-                        const Icon(Icons.chevron_right),
-                      ],
-                    ),
-                  ),
+              SliverPersistentHeader(
+                pinned: false,
+                floating: false,
+                delegate: _PeekHeader(
+                  onTap: _jumpToPersonalizedStart,
+                  containerKey: _peekHeaderKey,
                 ),
               ),
 
-            // 个性化起点锚点（用于标题切换与锚点滚动）
-            if (_personalizedEnabled)
-              SliverToBoxAdapter(child: SizedBox(key: _personalizedAnchorKey, height: 0)),
-
-            // 个性化区：目前放“选择目录/相册”卡片
+            // 个性化区：选择目录/相册卡片
             if (_personalizedEnabled)
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -359,16 +356,15 @@ class _HomePageState extends State<HomePage> {
                 ]),
               ),
 
-            // 自定义与重新排序（当前只有一个模块：选择目录/相册）
-            if (_personalizedEnabled)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                  child: _CustomizeButton(
-                    onTap: () => _showCustomizeSheet(context),
-                  ),
+            // —— 自定义与重新排序：始终可见（即使隐藏个性化区） ——
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                child: _CustomizeButton(
+                  onTap: () => _showCustomizeSheet(context),
                 ),
               ),
+            ),
           ],
         ),
       ),
@@ -399,7 +395,8 @@ class _HomePageState extends State<HomePage> {
               subtitle: const Text('后续接入系统相册/PhotoKit 选择器'),
               onTap: () {
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('相册选择即将支持')));
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(const SnackBar(content: Text('相册选择即将支持')));
               },
             ),
           ],
@@ -422,7 +419,8 @@ class _HomePageState extends State<HomePage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('自定义与重新排序', style: Theme.of(ctx).textTheme.titleLarge),
+                  Text('自定义与重新排序',
+                      style: Theme.of(ctx).textTheme.titleLarge),
                   const SizedBox(height: 12),
                   SwitchListTile(
                     value: enabled,
@@ -435,9 +433,9 @@ class _HomePageState extends State<HomePage> {
                     onPressed: () {
                       Navigator.pop(ctx);
                       _setPersonalizedEnabled(enabled);
-                      // 若刚开启，则滚到个性化起点；若刚关闭，则滚回照片起点
                       if (enabled) {
-                        Future.delayed(const Duration(milliseconds: 120), _jumpToPersonalizedStart);
+                        Future.delayed(const Duration(milliseconds: 120),
+                            _jumpToPersonalizedStart);
                       } else {
                         _jumpToPhotosStart();
                       }
@@ -577,4 +575,43 @@ class _CustomizeButton extends StatelessWidget {
       label: const Text('自定义与重新排序'),
     );
   }
+}
+
+// —— 照片区尾部的“窥视预览”header（露出个性化上缘） ——
+class _PeekHeader extends SliverPersistentHeaderDelegate {
+  final VoidCallback onTap;
+  final GlobalKey containerKey;
+  _PeekHeader({required this.onTap, required this.containerKey});
+
+  @override
+  double get minExtent => 24; // 最小只留一点空隙
+  @override
+  double get maxExtent => 160; // 露出的高度
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    final t = (shrinkOffset / (maxExtent - minExtent)).clamp(0.0, 1.0);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        key: containerKey, // 作为锚点用来判断“是否露头”
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        alignment: Alignment.bottomLeft,
+        child: Opacity(
+          opacity: 1 - t,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('更多项目', style: Theme.of(context).textTheme.titleMedium),
+              const Icon(Icons.expand_more),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _PeekHeader oldDelegate) => false;
 }
