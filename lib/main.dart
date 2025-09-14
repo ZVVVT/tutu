@@ -32,16 +32,16 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  // —— 持久化 key ——
+  // ---- persistent keys ----
   static const _kGridColsKey = 'tutu.grid.columns';
   static const _kPersonalizedEnabledKey = 'tutu.personalized.enabled';
   static const _kFilterKey = 'tutu.filter';
 
-  // —— UI 状态 ——
+  // ---- UI state ----
   final _scroll = ScrollController();
-  bool _titleShowsPhotos = false; // true=“照片”，false=“图库”
+  final GlobalKey _peekHeaderKey = GlobalKey();
+  bool _titleShowsPhotos = false; // true=照片, false=图库
 
-  // 列数：仅 1 / 3 / 6
   static const _allowedCols = [1, 3, 6];
   int _cols = 6;
   bool _scaleChangedOnce = false;
@@ -49,10 +49,17 @@ class _HomePageState extends State<HomePage> {
   bool _personalizedEnabled = true;
   MediaFilter _filter = MediaFilter.all;
 
-  // 数据
+  // data
   String? rootPath;
   List<MediaItem> _items = [];
   bool _loading = false;
+
+  // layout constants（与网格/预览计算一致）
+  static const double _hPad = 6; // 左右外边距
+  static const double _gridTopPad = 8;
+  static const double _gridMainSpacing = 6;
+  static const double _gridCrossSpacing = 6;
+  static const double _peekMinExtent = 28; // 露头高度
 
   @override
   void initState() {
@@ -91,9 +98,21 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _onScroll() {
-    // 标题切换：进入“照片区”（底部）即显示“照片”，否则“图库”
-    final offset = _scroll.offset;
-    setState(() => _titleShowsPhotos = offset > 20);
+    if (!_personalizedEnabled) {
+      if (_titleShowsPhotos) setState(() => _titleShowsPhotos = false);
+      return;
+    }
+    final ctx = _peekHeaderKey.currentContext;
+    if (ctx == null) return;
+    final box = ctx.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached) return;
+
+    final screenH = MediaQuery.of(context).size.height;
+    final dy = box.localToGlobal(Offset.zero).dy;
+    final visible = dy < screenH; // 露头即算“进入照片段”
+    if (visible != _titleShowsPhotos) {
+      setState(() => _titleShowsPhotos = visible);
+    }
   }
 
   Future<void> _pickFolder() async {
@@ -180,7 +199,6 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _jumpToPersonalizedStart() {
-    // 进入个性化区：滚动到页面底部附近
     _scroll.animateTo(_scroll.position.maxScrollExtent,
         duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
   }
@@ -218,7 +236,23 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  // —— UI ——
+  // ---- helpers to calc grid height (square tiles, cover crop) ----
+  double _tileSizeByCrossExtent(double crossExtent) {
+    final usable = crossExtent - _hPad * 2 - (_cols - 1) * _gridCrossSpacing;
+    return usable / _cols;
+  }
+
+  int _rowCount(int itemCount) => (itemCount + _cols - 1) ~/ _cols;
+
+  double _gridHeight(double crossExtent, int itemCount) {
+    final rows = _rowCount(itemCount);
+    if (rows == 0) return 0;
+    final tile = _tileSizeByCrossExtent(crossExtent);
+    final tilesHeight = rows * tile + (rows - 1) * _gridMainSpacing;
+    return _gridTopPad + tilesHeight; // bottom padding 为 0
+  }
+
+  // --------------------------- UI ---------------------------
   @override
   Widget build(BuildContext context) {
     final titleText =
@@ -232,7 +266,7 @@ class _HomePageState extends State<HomePage> {
         body: CustomScrollView(
           controller: _scroll,
           slivers: [
-            // 只保留 FlexibleSpaceBar，避免重复标题
+            // 只有 FlexibleSpaceBar（避免重复标题）
             SliverAppBar(
               pinned: true,
               expandedHeight: 112,
@@ -266,7 +300,6 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
 
-            // 照片区：使用 SliverFillRemaining，把网格“压到底部”（从下往上排）
             if (_loading)
               const SliverFillRemaining(
                 hasScrollBody: false,
@@ -288,52 +321,52 @@ class _HomePageState extends State<HomePage> {
                 hasScrollBody: false,
                 child: Center(child: Text('没有符合筛选的媒体')),
               )
-            else
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: Column(
-                  children: [
-                    const Expanded(child: SizedBox()), // 把网格压到底部
-                    // 照片网格（外层用 GridView 但不滚动，交给外层 Sliver 滚动）
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(6, 8, 6, 0),
-                      child: GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate:
-                            SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: _cols,
-                          mainAxisSpacing: 6,
-                          crossAxisSpacing: 6,
-                        ),
-                        itemCount: _filteredItems.length,
-                        itemBuilder: (context, i) =>
-                            _GridTile(item: _filteredItems[i]),
-                      ),
-                    ),
-                    // 窥视预览（露头）：点击/上滑进入个性化区
-                    if (_personalizedEnabled)
-                      InkWell(
-                        onTap: _jumpToPersonalizedStart,
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text('更多项目',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleMedium),
-                              const Icon(Icons.expand_more),
-                            ],
-                          ),
-                        ),
-                      ),
-                  ],
+            else ...[
+              // 关键：动态“顶端占位”，把网格推到底部（仅在个性化开启时生效）
+              if (_personalizedEnabled)
+                SliverLayoutBuilder(
+                  builder: (context, constraints) {
+                    final cross = constraints.crossAxisExtent;
+                    final remaining = constraints.remainingPaintExtent;
+                    final gridH = _gridHeight(cross, _filteredItems.length);
+                    // 网格后还有一个“露头”，因此也要预留 _peekMinExtent
+                    final needTopPad =
+                        (remaining - (gridH + _peekMinExtent)).clamp(0, double.infinity);
+                    return SliverToBoxAdapter(
+                      child: SizedBox(height: needTopPad),
+                    );
+                  },
+                ),
+
+              // 照片网格（正常可滚动 sliver）
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(_hPad, _gridTopPad, _hPad, 0),
+                sliver: SliverGrid.builder(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: _cols,
+                    mainAxisSpacing: _gridMainSpacing,
+                    crossAxisSpacing: _gridCrossSpacing,
+                  ),
+                  itemCount: _filteredItems.length,
+                  itemBuilder: (context, i) => _GridTile(item: _filteredItems[i]),
                 ),
               ),
 
-            // 个性化区：先提供“选择目录/相册”卡片
+              // 窥视预览：固定露头高度，内容贴底
+              if (_personalizedEnabled)
+                SliverPersistentHeader(
+                  pinned: false,
+                  floating: false,
+                  delegate: _PeekHeader(
+                    minExtent: _peekMinExtent,
+                    maxExtent: _peekMinExtent,
+                    onTap: _jumpToPersonalizedStart,
+                    containerKey: _peekHeaderKey,
+                  ),
+                ),
+            ],
+
+            // 个性化区：选择目录/相册卡片
             if (_personalizedEnabled)
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -342,12 +375,13 @@ class _HomePageState extends State<HomePage> {
                 ]),
               ),
 
-            // “自定义与重新排序”：始终显示
+            // 自定义与重新排序：始终显示
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                child:
-                    _CustomizeButton(onTap: () => _showCustomizeSheet(context)),
+                child: _CustomizeButton(
+                  onTap: () => _showCustomizeSheet(context),
+                ),
               ),
             ),
           ],
@@ -356,7 +390,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // —— bottom sheets ——
+  // ---- bottom sheets ----
 
   void _showChooseSheet(BuildContext context) {
     showModalBottomSheet(
@@ -404,8 +438,7 @@ class _HomePageState extends State<HomePage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('自定义与重新排序',
-                      style: Theme.of(ctx).textTheme.titleLarge),
+                  Text('自定义与重新排序', style: Theme.of(ctx).textTheme.titleLarge),
                   const SizedBox(height: 12),
                   SwitchListTile(
                     value: enabled,
@@ -437,7 +470,7 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-// —— 小部件 —— //
+// ---- widgets ----
 
 class _FilterChips extends StatelessWidget {
   final MediaFilter value;
@@ -480,7 +513,6 @@ class _GridTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 关键：下对齐裁切
     return FutureBuilder<File?>(
       future: ThumbnailCache.getThumb(item, maxSize: 480),
       builder: (context, snap) {
@@ -488,14 +520,14 @@ class _GridTile extends StatelessWidget {
           return Image.file(
             snap.data!,
             fit: BoxFit.cover,
-            alignment: Alignment.bottomCenter,
+            alignment: Alignment.bottomCenter, // 贴底裁切
           );
         }
         if (!item.isVideo) {
           return Image.file(
             File(item.path),
             fit: BoxFit.cover,
-            alignment: Alignment.bottomCenter,
+            alignment: Alignment.bottomCenter, // 贴底裁切
             cacheWidth: 480,
           );
         }
@@ -523,9 +555,7 @@ class _ChooseSourceCard extends StatelessWidget {
             children: const [
               Icon(Icons.add_photo_alternate_outlined, size: 28),
               SizedBox(width: 12),
-              Expanded(
-                child: Text('选择目录 / 相册', style: TextStyle(fontSize: 16)),
-              ),
+              Expanded(child: Text('选择目录 / 相册', style: TextStyle(fontSize: 16))),
               Icon(Icons.chevron_right),
             ],
           ),
@@ -551,4 +581,40 @@ class _CustomizeButton extends StatelessWidget {
       label: const Text('自定义与重新排序'),
     );
   }
+}
+
+class _PeekHeader extends SliverPersistentHeaderDelegate {
+  final double minExtent;
+  final double maxExtent;
+  final VoidCallback onTap;
+  final GlobalKey containerKey;
+  _PeekHeader({
+    required this.minExtent,
+    required this.maxExtent,
+    required this.onTap,
+    required this.containerKey,
+  });
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        key: containerKey,
+        alignment: Alignment.bottomLeft, // 内容贴底
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('更多项目', style: Theme.of(context).textTheme.titleMedium),
+            const Icon(Icons.expand_more),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _PeekHeader oldDelegate) => false;
 }
