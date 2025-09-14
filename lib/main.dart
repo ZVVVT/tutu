@@ -38,7 +38,6 @@ class _HomePageState extends State<HomePage> {
 
   // —— UI 状态 ——
   final _scroll = ScrollController();
-  final GlobalKey _peekHeaderKey = GlobalKey();
 
   // 列数：仅 1 / 3 / 6
   static const _allowedCols = [1, 3, 6];
@@ -57,7 +56,6 @@ class _HomePageState extends State<HomePage> {
   static const double _gridTopPad = 8;
   static const double _gridMainSpacing = 6;
   static const double _gridCrossSpacing = 6;
-  static const double _peekMinExtent = 28; // 露头高度
 
   // —— “一次性锚底”标记 ——（每次数据源变动会重置）
   bool _anchoredOnce = false;
@@ -160,11 +158,6 @@ class _HomePageState extends State<HomePage> {
         duration: const Duration(milliseconds: 260), curve: Curves.easeOutCubic);
   }
 
-  void _jumpToPersonalizedStart() {
-    _scroll.animateTo(_scroll.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
-  }
-
   // 捏合列数：一次手势只切一次档位
   void _onScaleStart(ScaleStartDetails d) {
     _scaleChangedOnce = false;
@@ -265,15 +258,16 @@ class _HomePageState extends State<HomePage> {
                 child: Center(child: Text('暂无媒体')),
               )
             else ...[
-              // 顶端占位：内容不足一屏时，把网格压到底部（仅个性化开启时需要）
+              // 顶端占位：内容不足一屏时，把网格压到底部（不再预留“窥视露头”）
               if (_personalizedEnabled)
                 SliverLayoutBuilder(
                   builder: (context, constraints) {
                     final cross = constraints.crossAxisExtent;
                     final remaining = constraints.remainingPaintExtent;
                     final gridH = _gridHeight(cross, _items.length);
-                    final raw = remaining - (gridH + _peekMinExtent);
-                    final double topPad = raw > 0 ? raw : 0.0;
+                    final double topPad = (remaining - gridH) > 0
+                        ? (remaining - gridH)
+                        : 0.0;
                     return SliverToBoxAdapter(child: SizedBox(height: topPad));
                   },
                 ),
@@ -291,22 +285,9 @@ class _HomePageState extends State<HomePage> {
                   itemBuilder: (context, i) => _GridTile(item: _items[i]),
                 ),
               ),
-
-              // 窥视预览：露头固定高度，内容贴底
-              if (_personalizedEnabled)
-                SliverPersistentHeader(
-                  pinned: false,
-                  floating: false,
-                  delegate: _PeekHeader(
-                    minExtent: _peekMinExtent,
-                    maxExtent: _peekMinExtent,
-                    onTap: _jumpToPersonalizedStart,
-                    containerKey: _peekHeaderKey,
-                  ),
-                ),
             ],
 
-            // 个性化区：选择目录/相册卡片
+            // 个性化区：直接显示“选择目录/相册”卡片（没有“更多项目”）
             if (_personalizedEnabled)
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -486,42 +467,6 @@ class _CustomizeButton extends StatelessWidget {
   }
 }
 
-class _PeekHeader extends SliverPersistentHeaderDelegate {
-  final double minExtent;
-  final double maxExtent;
-  final VoidCallback onTap;
-  final GlobalKey containerKey;
-  _PeekHeader({
-    required this.minExtent,
-    required this.maxExtent,
-    required this.onTap,
-    required this.containerKey,
-  });
-
-  @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Container(
-        key: containerKey,
-        alignment: Alignment.bottomLeft, // 内容贴底
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('更多项目', style: Theme.of(context).textTheme.titleMedium),
-            const Icon(Icons.expand_more),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  bool shouldRebuild(covariant _PeekHeader oldDelegate) => false;
-}
-
 /// 顶部大标题（毛玻璃 + 渐变；副标题贴大标题下，仅展开态可见；始终左对齐不跳位；无分割线）
 class PhotosHeaderDelegate extends SliverPersistentHeaderDelegate {
   final String title;
@@ -614,7 +559,7 @@ class PhotosHeaderDelegate extends SliverPersistentHeaderDelegate {
             ],
           ),
         ),
-        // ✅ 去掉分割线：不再绘制底部 Divider
+        // ✅ 已去掉“更多项目”窥视与分割线
       ],
     );
   }
