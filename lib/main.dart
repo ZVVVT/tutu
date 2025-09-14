@@ -7,6 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'services/folder_access.dart';
 import 'services/media_scanner.dart';
 import 'services/thumbnail_cache.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
+
 
 void main() {
   runApp(const TutuApp());
