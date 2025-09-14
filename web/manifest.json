@@ -1,11 +1,11 @@
 {
-    "name": "folder_gallery",
-    "short_name": "folder_gallery",
+    "name": "Tutu",
+    "short_name": "Tutu",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Folder-based photo viewer.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
