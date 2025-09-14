@@ -38,7 +38,7 @@ jobs:
           pod repo update
           pod install --repo-update
 
-      # 先用 Xcode 原生命令做一次“仅编译”，这样能把真正的第一条 error 打出来
+      # 可选：先用 Xcode 原生命令做一次“仅编译”，能把第一条编译错误暴露出来（排错更清晰）
       - name: Xcode build (compile only, no codesign)
         run: |
           set -euxo pipefail
@@ -55,6 +55,7 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             COMPILER_INDEX_STORE_ENABLE=NO | tee ../xcodebuild.compile.log
           cd ..
+
       - name: Upload compile log
         if: always()
         uses: actions/upload-artifact@v4
@@ -62,9 +63,21 @@ jobs:
           name: xcodebuild-compile-log
           path: xcodebuild.compile.log
 
-      # 再用 Flutter 的官方打包命令产出无签名 IPA
-      - name: Build IPA (no codesign)
-        run: flutter build ipa --release --no-codesign -v
+      # 用 Flutter 产出 Runner.app（无签名）
+      - name: Build iOS app (no codesign)
+        run: flutter build ios --release --no-codesign -v
+
+      # 手工打包 unsigned IPA：Payload/Runner.app -> Runner.ipa
+      - name: Package unsigned IPA
+        run: |
+          set -euxo pipefail
+          APP_PATH="build/ios/iphoneos/Runner.app"
+          test -d "$APP_PATH"
+          rm -rf build/ios/ipa
+          mkdir -p build/ios/ipa/Payload
+          cp -R "$APP_PATH" build/ios/ipa/Payload/Runner.app
+          (cd build/ios/ipa && /usr/bin/zip -r Runner.ipa Payload)
+          ls -lah build/ios/ipa
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
