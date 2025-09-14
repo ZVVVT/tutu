@@ -1,39 +1,42 @@
 ﻿name: iOS unsigned IPA
 
 on:
-  workflow_dispatch:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build-ios:
-    runs-on: macos-latest
+    runs-on: macos-14   # Apple Silicon runner
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: "stable"
+          channel: stable
+          cache: true
 
-      - name: Flutter pub get
-        run: flutter pub get
-
-      - name: Ensure CocoaPods
-        run: sudo gem install cocoapods -NV || true
-
-      - name: Build iOS (no codesign)
-        run: flutter build ios --release --no-codesign
-
-      - name: Package .ipa
-        shell: bash
+      - name: Doctor
         run: |
-          rm -rf Payload && mkdir Payload
-          cp -R build/ios/iphoneos/Runner.app Payload/
-          /usr/bin/zip -qry tutu-unsigned.ipa Payload
+          flutter --version
+          flutter doctor -v
+
+      - name: Install CocoaPods
+        run: sudo gem install cocoapods -NV
+
+      - name: Pod install (with repo update)
+        run: |
+          cd ios
+          pod repo update
+          pod install --repo-update
+
+      # 关键：用官方的 ipa 构建而不是手工 zip
+      - name: Build IPA (no codesign)
+        run: flutter build ipa --release --no-codesign -v
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: tutu-unsigned-ipa
-          path: tutu-unsigned.ipa
+          path: build/ios/ipa/*.ipa
