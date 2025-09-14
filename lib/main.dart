@@ -76,6 +76,7 @@ class _HomePageState extends State<HomePage> {
       _personalizedEnabled = p.getBool(_kPersonalizedEnabledKey) ?? true;
       _filter = MediaFilter.values[(p.getInt(_kFilterKey) ?? 0)
           .clamp(0, MediaFilter.values.length - 1)];
+          .toInt(); // 👈 保证是 int
     });
   }
 
@@ -329,14 +330,17 @@ class _HomePageState extends State<HomePage> {
                     final cross = constraints.crossAxisExtent;
                     final remaining = constraints.remainingPaintExtent;
                     final gridH = _gridHeight(cross, _filteredItems.length);
-                    // 网格后还有一个“露头”，因此也要预留 _peekMinExtent
-                    final needTopPad =
-                        (remaining - (gridH + _peekMinExtent)).clamp(0, double.infinity);
+                    // 原先 clamp 返回 num，这里转成 double
+                    final topPad = (remaining - (gridH + _peekMinExtent))
+                        .clamp(0.0, double.infinity)
+                        .toDouble(); // 👈
+
                     return SliverToBoxAdapter(
-                      child: SizedBox(height: needTopPad),
+                      child: SizedBox(height: topPad),
                     );
                   },
                 ),
+
 
               // 照片网格（正常可滚动 sliver）
               SliverPadding(
