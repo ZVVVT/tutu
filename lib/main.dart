@@ -32,16 +32,17 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  // ---- persistent keys ----
+  // —— 持久化 key ——
   static const _kGridColsKey = 'tutu.grid.columns';
   static const _kPersonalizedEnabledKey = 'tutu.personalized.enabled';
   static const _kFilterKey = 'tutu.filter';
 
-  // ---- UI state ----
+  // —— UI 状态 ——
   final _scroll = ScrollController();
   final GlobalKey _peekHeaderKey = GlobalKey();
-  bool _titleShowsPhotos = false; // true=照片, false=图库
+  bool _titleShowsPhotos = false; // true=“照片”，false=“图库”
 
+  // 列数：仅 1 / 3 / 6
   static const _allowedCols = [1, 3, 6];
   int _cols = 6;
   bool _scaleChangedOnce = false;
@@ -49,12 +50,12 @@ class _HomePageState extends State<HomePage> {
   bool _personalizedEnabled = true;
   MediaFilter _filter = MediaFilter.all;
 
-  // data
+  // 数据
   String? rootPath;
   List<MediaItem> _items = [];
   bool _loading = false;
 
-  // layout constants（与网格/预览计算一致）
+  // —— 布局常量（与网格/预览计算一致）——
   static const double _hPad = 6; // 左右外边距
   static const double _gridTopPad = 8;
   static const double _gridMainSpacing = 6;
@@ -71,12 +72,13 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _restorePrefs() async {
     final p = await SharedPreferences.getInstance();
+    final rawFilter = p.getInt(_kFilterKey) ?? 0;
+    final clampedIndex =
+        rawFilter.clamp(0, MediaFilter.values.length - 1).toInt(); // <- 修正：同一条链并转 int
     setState(() {
       _cols = _normalizeCols(p.getInt(_kGridColsKey) ?? 6);
       _personalizedEnabled = p.getBool(_kPersonalizedEnabledKey) ?? true;
-      _filter = MediaFilter.values[(p.getInt(_kFilterKey) ?? 0)
-          .clamp(0, MediaFilter.values.length - 1)];
-          .toInt(); // 👈 保证是 int
+      _filter = MediaFilter.values[clampedIndex];
     });
   }
 
@@ -237,7 +239,7 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  // ---- helpers to calc grid height (square tiles, cover crop) ----
+  // —— 计算网格高度（方形格子）——
   double _tileSizeByCrossExtent(double crossExtent) {
     final usable = crossExtent - _hPad * 2 - (_cols - 1) * _gridCrossSpacing;
     return usable / _cols;
@@ -250,10 +252,10 @@ class _HomePageState extends State<HomePage> {
     if (rows == 0) return 0;
     final tile = _tileSizeByCrossExtent(crossExtent);
     final tilesHeight = rows * tile + (rows - 1) * _gridMainSpacing;
-    return _gridTopPad + tilesHeight; // bottom padding 为 0
+    return _gridTopPad + tilesHeight;
   }
 
-  // --------------------------- UI ---------------------------
+  // —— UI —— //
   @override
   Widget build(BuildContext context) {
     final titleText =
@@ -267,7 +269,7 @@ class _HomePageState extends State<HomePage> {
         body: CustomScrollView(
           controller: _scroll,
           slivers: [
-            // 只有 FlexibleSpaceBar（避免重复标题）
+            // 只保留 FlexibleSpaceBar，避免重复标题
             SliverAppBar(
               pinned: true,
               expandedHeight: 112,
@@ -323,26 +325,21 @@ class _HomePageState extends State<HomePage> {
                 child: Center(child: Text('没有符合筛选的媒体')),
               )
             else ...[
-              // 关键：动态“顶端占位”，把网格推到底部（仅在个性化开启时生效）
+              // 顶端占位：当内容不足一屏时，把网格压到底部（仅个性化开启时需要）
               if (_personalizedEnabled)
                 SliverLayoutBuilder(
                   builder: (context, constraints) {
                     final cross = constraints.crossAxisExtent;
                     final remaining = constraints.remainingPaintExtent;
                     final gridH = _gridHeight(cross, _filteredItems.length);
-                    // 原先 clamp 返回 num，这里转成 double
                     final topPad = (remaining - (gridH + _peekMinExtent))
                         .clamp(0.0, double.infinity)
-                        .toDouble(); // 👈
-
-                    return SliverToBoxAdapter(
-                      child: SizedBox(height: topPad),
-                    );
+                        .toDouble(); // <- 修正：强转 double
+                    return SliverToBoxAdapter(child: SizedBox(height: topPad));
                   },
                 ),
 
-
-              // 照片网格（正常可滚动 sliver）
+              // 照片网格（正常可滚动）
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(_hPad, _gridTopPad, _hPad, 0),
                 sliver: SliverGrid.builder(
@@ -356,7 +353,7 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
 
-              // 窥视预览：固定露头高度，内容贴底
+              // 窥视预览：露头固定高度，内容贴底
               if (_personalizedEnabled)
                 SliverPersistentHeader(
                   pinned: false,
@@ -379,13 +376,12 @@ class _HomePageState extends State<HomePage> {
                 ]),
               ),
 
-            // 自定义与重新排序：始终显示
+            // “自定义与重新排序”：始终显示
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                child: _CustomizeButton(
-                  onTap: () => _showCustomizeSheet(context),
-                ),
+                child:
+                    _CustomizeButton(onTap: () => _showCustomizeSheet(context)),
               ),
             ),
           ],
@@ -394,7 +390,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ---- bottom sheets ----
+  // —— bottom sheets —— //
 
   void _showChooseSheet(BuildContext context) {
     showModalBottomSheet(
@@ -442,7 +438,8 @@ class _HomePageState extends State<HomePage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('自定义与重新排序', style: Theme.of(ctx).textTheme.titleLarge),
+                  Text('自定义与重新排序',
+                      style: Theme.of(ctx).textTheme.titleLarge),
                   const SizedBox(height: 12),
                   SwitchListTile(
                     value: enabled,
@@ -474,7 +471,7 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-// ---- widgets ----
+// —— 小部件 —— //
 
 class _FilterChips extends StatelessWidget {
   final MediaFilter value;
@@ -559,7 +556,9 @@ class _ChooseSourceCard extends StatelessWidget {
             children: const [
               Icon(Icons.add_photo_alternate_outlined, size: 28),
               SizedBox(width: 12),
-              Expanded(child: Text('选择目录 / 相册', style: TextStyle(fontSize: 16))),
+              Expanded(
+                child: Text('选择目录 / 相册', style: TextStyle(fontSize: 16)),
+              ),
               Icon(Icons.chevron_right),
             ],
           ),
