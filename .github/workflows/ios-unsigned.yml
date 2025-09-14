@@ -7,7 +7,8 @@ on:
 
 jobs:
   build-ios:
-    runs-on: macos-14   # Apple Silicon runner
+    runs-on: macos-14
+
     steps:
       - uses: actions/checkout@v4
 
@@ -22,6 +23,14 @@ jobs:
           flutter --version
           flutter doctor -v
 
+      # 关键：先生成 ios/Flutter/Generated.xcconfig
+      - name: Flutter pub get
+        run: flutter pub get
+
+      # 可选但推荐：预拉 iOS 构建产物，避免首次构建下载卡住
+      - name: Precache iOS artifacts
+        run: flutter precache --ios
+
       - name: Install CocoaPods
         run: sudo gem install cocoapods -NV
 
@@ -31,7 +40,6 @@ jobs:
           pod repo update
           pod install --repo-update
 
-      # 关键：用官方的 ipa 构建而不是手工 zip
       - name: Build IPA (no codesign)
         run: flutter build ipa --release --no-codesign -v
 
