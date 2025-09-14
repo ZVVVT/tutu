@@ -506,7 +506,7 @@ class _PeekHeader extends SliverPersistentHeaderDelegate {
       child: Container(
         key: containerKey,
         alignment: Alignment.bottomLeft, // 内容贴底
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -557,7 +557,7 @@ class PhotosHeaderDelegate extends SliverPersistentHeaderDelegate {
         ClipRect(
           child: BackdropFilter(
             filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-            child: Container(color: backgroundColor.withOpacity(0.85)),
+            child: Container(color: backgroundColor.withOpacity(0.5)),
           ),
         ),
         // 自上而下渐变透明（露出下方内容）
