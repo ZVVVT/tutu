@@ -23,8 +23,6 @@ class TutuApp extends StatelessWidget {
   }
 }
 
-enum MediaFilter { all, image, video, raw, heic }
-
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
   @override
@@ -35,7 +33,6 @@ class _HomePageState extends State<HomePage> {
   // —— 持久化 key ——
   static const _kGridColsKey = 'tutu.grid.columns';
   static const _kPersonalizedEnabledKey = 'tutu.personalized.enabled';
-  static const _kFilterKey = 'tutu.filter';
 
   // —— UI 状态 ——
   final _scroll = ScrollController();
@@ -48,7 +45,6 @@ class _HomePageState extends State<HomePage> {
   bool _scaleChangedOnce = false;
 
   bool _personalizedEnabled = true;
-  MediaFilter _filter = MediaFilter.all;
 
   // 数据
   String? rootPath;
@@ -75,13 +71,9 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _restorePrefs() async {
     final p = await SharedPreferences.getInstance();
-    final rawFilter = p.getInt(_kFilterKey) ?? 0;
-    final clampedIndex =
-        rawFilter.clamp(0, MediaFilter.values.length - 1).toInt(); // 类型安全
     setState(() {
       _cols = _normalizeCols(p.getInt(_kGridColsKey) ?? 6);
       _personalizedEnabled = p.getBool(_kPersonalizedEnabledKey) ?? true;
-      _filter = MediaFilter.values[clampedIndex];
     });
   }
 
@@ -171,47 +163,12 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  List<MediaItem> get _filteredItems {
-    return _items.where((it) {
-      final p = it.path.toLowerCase();
-      switch (_filter) {
-        case MediaFilter.all:
-          return true;
-        case MediaFilter.image:
-          return !it.isVideo && !_isRaw(p) && !_isHeic(p);
-        case MediaFilter.video:
-          return it.isVideo;
-        case MediaFilter.raw:
-          return !it.isVideo && _isRaw(p);
-        case MediaFilter.heic:
-          return !it.isVideo && _isHeic(p);
-      }
-    }).toList();
-  }
-
-  bool _isHeic(String p) => p.endsWith('.heic') || p.endsWith('.heif');
-  bool _isRaw(String p) =>
-      p.endsWith('.raw') ||
-      p.endsWith('.dng') ||
-      p.endsWith('.cr2') ||
-      p.endsWith('.cr3') ||
-      p.endsWith('.arw') ||
-      p.endsWith('.nef') ||
-      p.endsWith('.raf') ||
-      p.endsWith('.nrw');
-
   Future<void> _setCols(int v) async {
     final nv = _normalizeCols(v);
     if (nv == _cols) return;
     setState(() => _cols = nv);
     final p = await SharedPreferences.getInstance();
     await p.setInt(_kGridColsKey, nv);
-  }
-
-  Future<void> _setFilter(MediaFilter f) async {
-    setState(() => _filter = f);
-    final p = await SharedPreferences.getInstance();
-    await p.setInt(_kFilterKey, f.index);
   }
 
   Future<void> _setPersonalizedEnabled(bool enabled) async {
@@ -285,6 +242,9 @@ class _HomePageState extends State<HomePage> {
     final titleText =
         _personalizedEnabled ? (_titleShowsPhotos ? '照片' : '图库') : '图库';
 
+    final imageCount = _items.where((e) => !e.isVideo).length;
+    final videoCount = _items.where((e) => e.isVideo).length;
+
     return GestureDetector(
       onScaleStart: _onScaleStart,
       onScaleUpdate: _onScaleUpdate,
@@ -293,7 +253,7 @@ class _HomePageState extends State<HomePage> {
         body: CustomScrollView(
           controller: _scroll,
           slivers: [
-            // 只保留 FlexibleSpaceBar，避免重复标题
+            // 顶部：大标题（靠左）、收起为小标题
             SliverAppBar(
               pinned: true,
               expandedHeight: 112,
@@ -302,30 +262,27 @@ class _HomePageState extends State<HomePage> {
                 expandedTitleScale: 1.6,
                 titlePadding:
                     const EdgeInsetsDirectional.only(start: 16, bottom: 12),
-                title: Text(titleText),
+                title: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(titleText),
+                ),
               ),
             ),
 
-            // 统计 + 筛选
-            SliverToBoxAdapter(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (rootPath != null)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                      child: Text(
-                        '${_items.where((e) => !e.isVideo).length} 张照片 · ${_items.where((e) => e.isVideo).length} 个视频',
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.copyWith(color: Colors.grey[600]),
-                      ),
-                    ),
-                  _FilterChips(value: _filter, onChanged: _setFilter),
-                ],
+            // 统计（放在标题下方，更贴近系统）
+            if (rootPath != null)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+                  child: Text(
+                    '$imageCount 张照片 · $videoCount 个视频',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: Colors.grey[600]),
+                  ),
+                ),
               ),
-            ),
 
             if (_loading)
               const SliverFillRemaining(
@@ -343,10 +300,10 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               )
-            else if (_filteredItems.isEmpty)
+            else if (_items.isEmpty)
               const SliverFillRemaining(
                 hasScrollBody: false,
-                child: Center(child: Text('没有符合筛选的媒体')),
+                child: Center(child: Text('暂无媒体')),
               )
             else ...[
               // 顶端占位：当内容不足一屏时，把网格压到底部（仅个性化开启时需要）
@@ -355,7 +312,7 @@ class _HomePageState extends State<HomePage> {
                   builder: (context, constraints) {
                     final cross = constraints.crossAxisExtent;
                     final remaining = constraints.remainingPaintExtent;
-                    final gridH = _gridHeight(cross, _filteredItems.length);
+                    final gridH = _gridHeight(cross, _items.length);
                     final topPad = (remaining - (gridH + _peekMinExtent))
                         .clamp(0.0, double.infinity)
                         .toDouble(); // 类型安全
@@ -372,8 +329,8 @@ class _HomePageState extends State<HomePage> {
                     mainAxisSpacing: _gridMainSpacing,
                     crossAxisSpacing: _gridCrossSpacing,
                   ),
-                  itemCount: _filteredItems.length,
-                  itemBuilder: (context, i) => _GridTile(item: _filteredItems[i]),
+                  itemCount: _items.length,
+                  itemBuilder: (context, i) => _GridTile(item: _items[i]),
                 ),
               ),
 
@@ -492,41 +449,6 @@ class _HomePageState extends State<HomePage> {
 }
 
 // —— 小部件 —— //
-
-class _FilterChips extends StatelessWidget {
-  final MediaFilter value;
-  final ValueChanged<MediaFilter> onChanged;
-  const _FilterChips({required this.value, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    const items = {
-      MediaFilter.all: '全部',
-      MediaFilter.image: '图片',
-      MediaFilter.video: '视频',
-      MediaFilter.raw: 'RAW',
-      MediaFilter.heic: 'HEIC',
-    };
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: items.entries.map((e) {
-          final selected = e.key == value;
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: ChoiceChip(
-              label: Text(e.value),
-              selected: selected,
-              onSelected: (_) => onChanged(e.key),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-}
 
 class _GridTile extends StatelessWidget {
   final MediaItem item;
