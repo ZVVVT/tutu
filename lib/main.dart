@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -157,8 +159,7 @@ class _HomePageState extends State<HomePage> {
         }
         _anchoredOnce = true;
       } else {
-        // 不足一屏，无需滚动，也算完成一次锚底
-        _anchoredOnce = true;
+        _anchoredOnce = true; // 不足一屏也算完成
       }
     });
   }
@@ -213,14 +214,7 @@ class _HomePageState extends State<HomePage> {
     _scaleChangedOnce = false;
   }
 
-  @override
-  void dispose() {
-    FolderAccess.releaseAccess();
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  // —— 计算网格高度（方形格子）——
+  // —— 网格尺寸计算 —— //
   double _tileSizeByCrossExtent(double crossExtent) {
     final usable = crossExtent - _hPad * 2 - (_cols - 1) * _gridCrossSpacing;
     return usable / _cols;
@@ -234,6 +228,13 @@ class _HomePageState extends State<HomePage> {
     final tile = _tileSizeByCrossExtent(crossExtent);
     final tilesHeight = rows * tile + (rows - 1) * _gridMainSpacing;
     return _gridTopPad + tilesHeight;
+  }
+
+  @override
+  void dispose() {
+    FolderAccess.releaseAccess();
+    _scroll.dispose();
+    super.dispose();
   }
 
   // —— UI —— //
@@ -253,36 +254,17 @@ class _HomePageState extends State<HomePage> {
         body: CustomScrollView(
           controller: _scroll,
           slivers: [
-            // 顶部：大标题（靠左）、收起为小标题
-            SliverAppBar(
+            // 顶部：自定义大标题（毛玻璃+渐变；副标题贴在大标题下，仅展开态可见）
+            SliverPersistentHeader(
               pinned: true,
-              expandedHeight: 112,
-              flexibleSpace: FlexibleSpaceBar(
-                collapseMode: CollapseMode.pin,
-                expandedTitleScale: 1.6,
-                titlePadding:
-                    const EdgeInsetsDirectional.only(start: 16, bottom: 12),
-                title: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(titleText),
-                ),
+              delegate: PhotosHeaderDelegate(
+                title: titleText,
+                subtitle:
+                    rootPath != null ? '$imageCount 张照片 · $videoCount 个视频' : '',
+                topPadding: MediaQuery.of(context).padding.top,
+                backgroundColor: Theme.of(context).colorScheme.surface,
               ),
             ),
-
-            // 统计（放在标题下方，更贴近系统）
-            if (rootPath != null)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
-                  child: Text(
-                    '$imageCount 张照片 · $videoCount 个视频',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: Colors.grey[600]),
-                  ),
-                ),
-              ),
 
             if (_loading)
               const SliverFillRemaining(
@@ -306,21 +288,20 @@ class _HomePageState extends State<HomePage> {
                 child: Center(child: Text('暂无媒体')),
               )
             else ...[
-              // 顶端占位：当内容不足一屏时，把网格压到底部（仅个性化开启时需要）
+              // 顶端占位：内容不足一屏时，把网格压到底部（仅个性化开启时需要）
               if (_personalizedEnabled)
                 SliverLayoutBuilder(
                   builder: (context, constraints) {
                     final cross = constraints.crossAxisExtent;
                     final remaining = constraints.remainingPaintExtent;
                     final gridH = _gridHeight(cross, _items.length);
-                    final topPad = (remaining - (gridH + _peekMinExtent))
-                        .clamp(0.0, double.infinity)
-                        .toDouble(); // 类型安全
+                    final raw = remaining - (gridH + _peekMinExtent);
+                    final double topPad = raw > 0 ? raw : 0.0;
                     return SliverToBoxAdapter(child: SizedBox(height: topPad));
                   },
                 ),
 
-              // 照片网格（正常可滚动）
+              // 照片网格（贴底裁切，下对齐）
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(_hPad, _gridTopPad, _hPad, 0),
                 sliver: SliverGrid.builder(
@@ -562,4 +543,116 @@ class _PeekHeader extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(covariant _PeekHeader oldDelegate) => false;
+}
+
+/// 顶部大标题（毛玻璃 + 渐变；副标题贴大标题下，仅展开态可见；始终左对齐不跳位）
+class PhotosHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final String title;
+  final String subtitle;         // 统计小字（展开时显示，收起淡出）
+  final double topPadding;       // 安全区
+  final Color backgroundColor;   // 适配明暗色
+
+  PhotosHeaderDelegate({
+    required this.title,
+    required this.subtitle,
+    required this.topPadding,
+    required this.backgroundColor,
+  });
+
+  @override
+  double get minExtent => topPadding + 56;   // 收起高度
+  @override
+  double get maxExtent => topPadding + 120;  // 展开高度
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    final d = (maxExtent - minExtent);
+    final t = (d <= 0) ? 1.0 : (shrinkOffset / d).clamp(0.0, 1.0);
+
+    final double titleFont = ui.lerpDouble(32, 20, t)!;        // 大->小
+    final double titleTop  = topPadding + ui.lerpDouble(18, 8, t)!; // 轻微上移
+    final double subtitleOpacity = 1 - t;                       // 仅展开时可见
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // 毛玻璃 + 半透明底色
+        ClipRect(
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: Container(color: backgroundColor.withOpacity(0.85)),
+          ),
+        ),
+        // 自上而下渐变透明（露出下方内容）
+        Positioned.fill(
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    backgroundColor.withOpacity(0.90),
+                    backgroundColor.withOpacity(0.60),
+                    backgroundColor.withOpacity(0.00),
+                  ],
+                  stops: const [0.0, 0.6, 1.0],
+                ),
+              ),
+            ),
+          ),
+        ),
+        // 左对齐标题 + 展开态副标题
+        Positioned(
+          left: 16,
+          right: 16,
+          top: titleTop,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: titleFont,
+                  fontWeight: FontWeight.w600,
+                  height: 1.1,
+                ),
+              ),
+              if (subtitle.isNotEmpty)
+                Opacity(
+                  opacity: subtitleOpacity,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      subtitle,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: Colors.grey[600]),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        // 底部分割线（很淡）
+        const Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: Divider(height: 0.5, thickness: 0.5),
+        ),
+      ],
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant PhotosHeaderDelegate old) {
+    return title != old.title ||
+        subtitle != old.subtitle ||
+        backgroundColor != old.backgroundColor ||
+        topPadding != old.topPadding;
+  }
 }
