@@ -1,3 +1,4 @@
+// ignore_for_file: unused_element
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -32,11 +33,11 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  // —— 持久化 key ——
+  // —— 持久化 key —— 
   static const _kGridColsKey = 'tutu.grid.columns';
   static const _kPersonalizedEnabledKey = 'tutu.personalized.enabled';
 
-  // —— UI 状态 ——
+  // —— UI 状态 —— 
   final _scroll = ScrollController();
 
   // 列数：仅 1 / 3 / 6
@@ -51,7 +52,7 @@ class _HomePageState extends State<HomePage> {
   List<MediaItem> _items = [];
   bool _loading = false;
 
-  // —— 布局常量（与网格/预览计算一致）——
+  // —— 布局常量（与网格/预览计算一致）—— 
   static const double _hPad = 6; // 左右外边距
   static const double _gridTopPad = 8;
   static const double _gridMainSpacing = 6;
@@ -154,8 +155,11 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _jumpToPhotosStart() {
-    _scroll.animateTo(0,
-        duration: const Duration(milliseconds: 260), curve: Curves.easeOutCubic);
+    _scroll.animateTo(
+      0,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   // 捏合列数：一次手势只切一次档位
@@ -265,16 +269,16 @@ class _HomePageState extends State<HomePage> {
                     final cross = constraints.crossAxisExtent;
                     final remaining = constraints.remainingPaintExtent;
                     final gridH = _gridHeight(cross, _items.length);
-                    final double topPad = (remaining - gridH) > 0
-                        ? (remaining - gridH)
-                        : 0.0;
+                    final double topPad =
+                        (remaining - gridH) > 0 ? (remaining - gridH) : 0.0;
                     return SliverToBoxAdapter(child: SizedBox(height: topPad));
                   },
                 ),
 
               // 照片网格（贴底裁切，下对齐）
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(_hPad, _gridTopPad, _hPad, 0),
+                padding:
+                    const EdgeInsets.fromLTRB(_hPad, _gridTopPad, _hPad, 0),
                 sliver: SliverGrid.builder(
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: _cols,
@@ -334,8 +338,9 @@ class _HomePageState extends State<HomePage> {
               subtitle: const Text('后续接入系统相册/PhotoKit 选择器'),
               onTap: () {
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context)
-                    .showSnackBar(const SnackBar(content: Text('相册选择即将支持')));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('相册选择即将支持')),
+                );
               },
             ),
           ],
@@ -502,7 +507,7 @@ class PhotosHeaderDelegate extends SliverPersistentHeaderDelegate {
         ClipRect(
           child: BackdropFilter(
             filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-            child: Container(color: backgroundColor.withOpacity(0.5)),
+            child: Container(color: backgroundColor.withValues(alpha: 0.5)),
           ),
         ),
         // 自上而下渐变透明（露出下方内容）
@@ -514,9 +519,9 @@ class PhotosHeaderDelegate extends SliverPersistentHeaderDelegate {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    backgroundColor.withOpacity(0.90),
-                    backgroundColor.withOpacity(0.60),
-                    backgroundColor.withOpacity(0.00),
+                    backgroundColor.withValues(alpha: 0.90),
+                    backgroundColor.withValues(alpha: 0.60),
+                    backgroundColor.withValues(alpha: 0.00),
                   ],
                   stops: const [0.0, 0.6, 1.0],
                 ),
