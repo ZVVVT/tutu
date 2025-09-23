@@ -4,8 +4,8 @@ import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 
-// import 'package:flutter/services.dart'; // SystemUiOverlayStyle.light
-
+// 如需把状态栏图标改为白色，解开下一行并在 _GlassAppBar 里启用 systemOverlayStyle
+// import 'package:flutter/services.dart';
 
 /// 与系统“照片”一致：
 /// - 新 → 旧（降序）
@@ -50,6 +50,14 @@ class _TimelinePageState extends State<TimelinePage> {
     _scroll.removeListener(_onScroll);
     _scroll.dispose();
     super.dispose();
+  }
+
+  // 顶部“可点留白”高度（状态栏 + AppBar + 额外缓冲）
+  double _topInteractiveGap(BuildContext context) {
+    final topSafe = MediaQuery.of(context).padding.top;
+    const double kToolbar = 44; // 与 _GlassAppBar 默认高度保持一致
+    const double kExtra = 8;    // 手指缓冲，避免误触
+    return topSafe + kToolbar + kExtra;
   }
 
   // 稳定排序：按创建时间降序；同秒按 id 降序
@@ -109,7 +117,7 @@ class _TimelinePageState extends State<TimelinePage> {
   }
 
   void _onScroll() {
-    // 仅用于“渐进清晰”，与 AppBar 无关（AppBar 现在不随滚动改变）
+    // 仅用于“渐进清晰”，与 AppBar 无关（AppBar 不随滚动改变）
     _isScrolling = true;
     _lastScroll = DateTime.now();
     Future.delayed(const Duration(milliseconds: 120), () {
@@ -188,7 +196,7 @@ class _TimelinePageState extends State<TimelinePage> {
     }
 
     return Scaffold(
-      extendBodyBehindAppBar: true,                    // 内容延伸到 AppBar 背后
+      extendBodyBehindAppBar: true,                         // 内容延伸到 AppBar 背后
       appBar: const _GlassAppBar(title: '时间线', height: 44), // 始终相同的渐变 & 毛玻璃
       body: Directionality(
         textDirection: TextDirection.rtl, // 行内右→左
@@ -205,6 +213,7 @@ class _TimelinePageState extends State<TimelinePage> {
             reverse: true,         // 自底向上
             cacheExtent: 1200,
             slivers: [
+              // 1) 照片网格（reverse=true：视觉上“靠下”）
               SliverPadding(
                 padding: const EdgeInsets.all(4),
                 sliver: SliverGrid(
@@ -231,7 +240,7 @@ class _TimelinePageState extends State<TimelinePage> {
                 ),
               ),
 
-              // 顶部分页指示（reverse 下的“顶部”）
+              // 2) 顶部分页指示（reverse 下的“顶部”）
               SliverToBoxAdapter(
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 180),
@@ -247,6 +256,11 @@ class _TimelinePageState extends State<TimelinePage> {
                         )
                       : const SizedBox.shrink(),
                 ),
+              ),
+
+              // 3) 视觉最顶上的“可点留白”（reverse=true 要放在最后）
+              SliverToBoxAdapter(
+                child: SizedBox(height: _topInteractiveGap(context)),
               ),
             ],
           ),
@@ -337,7 +351,8 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
   final double height;
 
-  static const double _kTopAlpha = 0.60; // 顶部黑色强度
+  // 调节点：
+  static const double _kTopAlpha = 0.60; // 顶部黑色强度（0~1）
 
   @override
   Size get preferredSize => Size.fromHeight(height);
@@ -345,7 +360,6 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     return AppBar(
-      // 文字/图标浅色，适配黑色覆盖
       foregroundColor: Colors.white,
       iconTheme: const IconThemeData(color: Colors.white),
       titleTextStyle:
@@ -356,13 +370,13 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
       elevation: 0,
       backgroundColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
-      // 如需白色状态栏图标，取消下一行注释并确保已 import 'package:flutter/services.dart';
+      // 如需白色状态栏图标，取消下一行注释并确保顶部 import 了 services.dart
       // systemOverlayStyle: SystemUiOverlayStyle.light,
       flexibleSpace: ClipRect(
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // 1) 毛玻璃：底部用 ShaderMask 把模糊裁成 0，确保“完全透明”
+            // 1) 毛玻璃：底部裁成 0，确保“完全透明 & 不模糊”
             ShaderMask(
               shaderCallback: (rect) => const LinearGradient(
                 begin: Alignment.topCenter,
@@ -376,7 +390,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
                 child: const SizedBox.expand(),
               ),
             ),
-            // 2) 颜色覆盖：顶部黑色 → 底部完全透明（用 withValues 避免弃用告警）
+            // 2) 颜色覆盖：顶部黑色 → 底部完全透明（withValues 避免弃用告警）
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -396,8 +410,6 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
-
-
 
 /// 查看页：先中清(1024) → 再原图淡入
 class _Viewer extends StatelessWidget {
