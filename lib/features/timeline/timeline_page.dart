@@ -324,41 +324,52 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
   }
 }
 
-/// 毛玻璃 + 纯渐变透明 AppBar（上实→下全透；不随滚动变化）
-/// 注意：用 ShaderMask 裁剪 BackdropFilter 的模糊，让底部也完全“无模糊”。
+/// 毛玻璃 + 黑色→透明 渐变（底部完全透明；不随滚动变化）
 class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _GlassAppBar({
     required this.title,
     this.height = 44,
+    this.topAlpha = 0.60, // 顶部黑色不透明度，0~1，可按需调 0.45~0.70
   });
 
   final String title;
   final double height;
+  final double topAlpha;
 
   @override
   Size get preferredSize => Size.fromHeight(height);
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
     return AppBar(
+      // 文字/返回箭头均用浅色，以适配黑色覆盖
+      foregroundColor: Colors.white,
+      iconTheme: const IconThemeData(color: Colors.white),
+      titleTextStyle: Theme.of(context)
+          .textTheme
+          .titleLarge
+          ?.copyWith(color: Colors.white),
       title: Text(title),
       centerTitle: true,
       toolbarHeight: height,
       elevation: 0,
       backgroundColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
+      // 状态栏图标改为浅色（iOS 顶部电量/时间变白）
+      systemOverlayStyle: ui.PlatformDispatcher.instance.platformBrightness ==
+              Brightness.dark
+          ? SystemUiOverlayStyle.light // 深色模式也保持浅色状态栏更接近照片App
+          : SystemUiOverlayStyle.light,
       flexibleSpace: ClipRect(
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // 毛玻璃层：用 ShaderMask 让模糊从上到下 1→0
+            // 1) 毛玻璃：用 ShaderMask 让底部模糊=0（完全透明）
             ShaderMask(
               shaderCallback: (rect) => const LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Colors.white, Colors.transparent],
+                colors: [Colors.white, Colors.transparent], // 顶部显、底部裁
                 stops: [0.0, 1.0],
               ).createShader(rect),
               blendMode: BlendMode.dstIn,
@@ -367,15 +378,15 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
                 child: const SizedBox.expand(),
               ),
             ),
-            // 颜色渐变：顶部不透明 → 底部完全透明
+            // 2) 颜色覆盖：黑色 → 完全透明
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    scheme.surface.withValues(alpha: 1.0),
-                    scheme.surface.withValues(alpha: 0.0),
+                    Colors.black.withOpacity(topAlpha), // 顶部更“实”的黑
+                    Colors.black.withOpacity(0.0),       // 底部 100% 透明
                   ],
                   stops: const [0.0, 1.0],
                 ),
@@ -387,6 +398,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
+
 
 /// 查看页：先中清(1024) → 再原图淡入
 class _Viewer extends StatelessWidget {
