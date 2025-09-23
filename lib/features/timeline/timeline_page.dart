@@ -328,7 +328,7 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
 }
 
 
-/// 毛玻璃 + 纯渐变透明 AppBar（上实→下全透）
+/// 毛玻璃 + 纯渐变透明（顶部更实 → 底部 100% 透明，连“模糊”也在底部为 0）
 class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _GlassAppBar({
     required this.title,
@@ -359,19 +359,29 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // 毛玻璃
-            BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-              child: const SizedBox.expand(),
+            // 1) 毛玻璃层：用 ShaderMask 把模糊强度从上到下裁剪为 1→0
+            ShaderMask(
+              shaderCallback: (rect) => const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.white, Colors.transparent], // 顶部显示，底部裁成 0
+                stops: [0.0, 1.0],
+              ).createShader(rect),
+              blendMode: BlendMode.dstIn, // 用 mask 的 alpha 作为目标透明度
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                child: const SizedBox.expand(),
+              ),
             ),
-            // 仅保留一个纵向渐变：顶部不透明 → 底部完全透明
+
+            // 2) 颜色渐变：顶部随滚动更“实”，到底部完全 0
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    scheme.surface.withValues(alpha: 1.0 * o), // 顶部更“实”
+                    scheme.surface.withValues(alpha: 1.0 * o), // 顶部不透明度随 o
                     scheme.surface.withValues(alpha: 0.0),      // 底部 100% 透明
                   ],
                   stops: const [0.0, 1.0],
@@ -384,6 +394,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
+
 
 
 /// 查看页：先中清(1024) → 再原图淡入
