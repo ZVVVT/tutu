@@ -11,14 +11,16 @@ class TutuFolderBridge {
 
   static Future<Map<String, dynamic>?> pickDirectory() async {
     if (!_isIOS) return null;
-    final Map<Object?, Object?>? res = await _m.invokeMethod<Map<Object?, Object?>>('pickDirectory');
+    final Map<Object?, Object?>? res =
+        await _m.invokeMethod<Map<Object?, Object?>>('pickDirectory');
     if (res == null) return null;
     return Map<String, dynamic>.from(res);
   }
 
   static Future<Map<String, dynamic>?> openDirectory(String path) async {
     if (!_isIOS) return null;
-    final Map<Object?, Object?>? res = await _m.invokeMethod<Map<Object?, Object?>>(
+    final Map<Object?, Object?>? res =
+        await _m.invokeMethod<Map<Object?, Object?>>(
       'openDirectory',
       {'path': path},
     );
@@ -28,24 +30,36 @@ class TutuFolderBridge {
 
   static Future<bool> revokeAccess(String identifier) async {
     if (!_isIOS) return false;
-    final bool? res = await _m.invokeMethod<bool>('revokeAccess', {'id': identifier});
+    final bool? res =
+        await _m.invokeMethod<bool>('revokeAccess', {'id': identifier});
     return res ?? false;
   }
 
   static Future<List<Map<String, dynamic>>> listBookmarks() async {
     if (!_isIOS) return const [];
-    final List<Object?>? res = await _m.invokeMethod<List<Object?>>('listBookmarks');
+    final List<Object?>? res =
+        await _m.invokeMethod<List<Object?>>('listBookmarks');
     if (res == null) return const [];
     return res
-        .whereType<Map>()
-        .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map))
+        .whereType<Map<Object?, Object?>>()
+        .map((m) => Map<String, dynamic>.from(m))
         .toList();
   }
 
   static Stream<Map<String, dynamic>> get folderChanges => _isIOS
       ? _e
           .receiveBroadcastStream()
-          .where((e) => e != null)
-          .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map))
+          .map<Map<String, dynamic>>((event) {
+            if (event is Map<Object?, Object?>) {
+              return Map<String, dynamic>.from(event);
+            }
+            if (event is Map) {
+              // 兜底：老代码/插件可能回传未声明泛型的 Map
+              return Map<String, dynamic>.from(
+                  Map<Object?, Object?>.from(event));
+            }
+            return const <String, dynamic>{};
+          })
+          .where((m) => m.isNotEmpty)
       : const Stream<Map<String, dynamic>>.empty();
 }
