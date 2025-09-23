@@ -1,6 +1,5 @@
 # Tutu
 
-Folder-based photo viewer.
 
 ## Getting Started
 
