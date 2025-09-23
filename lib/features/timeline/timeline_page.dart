@@ -327,12 +327,13 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
   }
 }
 
-/// 毛玻璃 + 渐变透明 AppBar（随滚动变实，更接近系统“照片”）
+
+/// 毛玻璃 + 纯渐变透明 AppBar（上实→下全透）
 class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _GlassAppBar({
     required this.title,
     this.height = 44,
-    this.opacity = 1.0, // 0~1
+    this.opacity = 1.0, // 0~1，随滚动传入
   });
 
   final String title;
@@ -358,38 +359,23 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // 1) 毛玻璃（略强）
+            // 毛玻璃
             BackdropFilter(
               filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
               child: const SizedBox.expand(),
             ),
-            // 2) 纵向渐变：上实下透；随滚动叠加透明度
+            // 仅保留一个纵向渐变：顶部不透明 → 底部完全透明
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    scheme.surface.withValues(alpha: 0.88 * o),
-                    scheme.surface.withValues(alpha: 0.60 * o),
-                    scheme.surface.withValues(alpha: 0.00 * o),
+                    scheme.surface.withValues(alpha: 1.0 * o), // 顶部更“实”
+                    scheme.surface.withValues(alpha: 0.0),      // 底部 100% 透明
                   ],
-                  stops: const [0.0, 0.6, 1.0],
+                  stops: const [0.0, 1.0],
                 ),
-              ),
-            ),
-            // 3) 轻微高光蒙层，增强磨砂质感
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: scheme.onSurface.withValues(alpha: 0.02 * o),
-              ),
-            ),
-            // 4) 底部分隔线（随滚动显现）
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: Container(
-                height: 0.5,
-                color: scheme.onSurface.withValues(alpha: 0.10 * o),
               ),
             ),
           ],
@@ -398,6 +384,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
+
 
 /// 查看页：先中清(1024) → 再原图淡入
 class _Viewer extends StatelessWidget {
