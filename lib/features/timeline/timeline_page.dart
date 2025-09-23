@@ -1,11 +1,13 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 
 /// 与系统“照片”一致：
-/// - 新 -> 旧（降序）
-/// - 视图 reverse: true，首帧出现在底部
-/// - 向“上”滚动时分页加载更旧的资源
+/// - 新 → 旧（降序）
+/// - 视图 reverse: true，首帧位于底部
+/// - 向“上”滚动时分页加载更旧
+/// - 缩略图/原图采用“渐进清晰”（先糊后清）
 class TimelinePage extends StatefulWidget {
   const TimelinePage({super.key});
   @override
@@ -15,16 +17,22 @@ class TimelinePage extends StatefulWidget {
 class _TimelinePageState extends State<TimelinePage> {
   final ScrollController _scroll = ScrollController();
 
-  bool _loading = true;           // 首次加载
-  bool _loadingMore = false;      // 顶部追加分页
-  bool _noMore = false;           // 已无更多数据
+  // 加载状态
+  bool _loading = true;       // 首屏加载
+  bool _loadingMore = false;  // 顶部分页加载
+  bool _noMore = false;       // 没有更多旧内容
   String? _denyReason;
 
+  // 数据
   final List<AssetEntity> _assets = [];
 
-  // 分页参数
+  // 分页参数（可按需要调小/调大）
   static const int _pageSize = 200;
-  int _nextPage = 0; // getAssetListPaged(page: _nextPage)
+  int _nextPage = 0;
+
+  // 滚动节流：滚动中只渲染低清，停止 120ms 后再升级高清
+  bool _isScrolling = false;
+  DateTime _lastScroll = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
   void initState() {
@@ -58,7 +66,7 @@ class _TimelinePageState extends State<TimelinePage> {
       return;
     }
 
-    // 只取“所有照片/Recent”，并按创建时间【降序】（新 -> 旧）
+    // 仅取系统“所有照片/Recent”，按创建时间【降序】（新→旧）
     final paths = await PhotoManager.getAssetPathList(
       type: RequestType.common,
       onlyAll: true,
@@ -75,23 +83,31 @@ class _TimelinePageState extends State<TimelinePage> {
     }
 
     final p = paths.first;
-
-    // 首次只取一页，保证首帧快；reverse 渲染，首帧直接在底部，无需跳转
     final first = await p.getAssetListPaged(page: _nextPage, size: _pageSize);
     _nextPage++;
+
     setState(() {
-      _assets.addAll(first);
+      _assets.addAll(first);            // 新→旧
       _loading = false;
       _noMore = first.length < _pageSize;
     });
   }
 
-  // 监听向上滚动接近“顶部”时加载更多（reverse: true -> 视觉顶部 = 滚动距离接近 maxScrollExtent）
   void _onScroll() {
+    // 轻量节流：记录滚动中状态，降低高清替换频率
+    _isScrolling = true;
+    _lastScroll = DateTime.now();
+    Future.delayed(const Duration(milliseconds: 120), () {
+      if (DateTime.now().difference(_lastScroll).inMilliseconds >= 120) {
+        _isScrolling = false;
+        if (mounted) setState(() {}); // 触发可视区高清升级
+      }
+    });
+
     if (_loadingMore || _noMore || !_scroll.hasClients) return;
 
     final pos = _scroll.position;
-    // 距离“视觉顶部”小于 1000 像素时触发下一页
+    // reverse=true：视觉“顶部”是 pos.maxScrollExtent。逼近时加载更多旧数据
     final bool nearTop = pos.pixels >= (pos.maxScrollExtent - 1000);
     if (nearTop) _loadMore();
   }
@@ -100,7 +116,6 @@ class _TimelinePageState extends State<TimelinePage> {
     if (_loadingMore || _noMore) return;
     setState(() => _loadingMore = true);
 
-    // 仍按创建时间【降序】分页（与首屏一致）
     final paths = await PhotoManager.getAssetPathList(
       type: RequestType.common,
       onlyAll: true,
@@ -120,7 +135,7 @@ class _TimelinePageState extends State<TimelinePage> {
     final chunk = await p.getAssetListPaged(page: _nextPage, size: _pageSize);
     _nextPage++;
 
-    // 在 reverse 视图下，追加到列表尾部 = 视觉上的“上方”，不会影响底部稳定性
+    // 追加到尾部（reverse=true 下“视觉上方”），不会影响底部稳定性
     setState(() {
       _assets.addAll(chunk);
       _loadingMore = false;
@@ -158,62 +173,142 @@ class _TimelinePageState extends State<TimelinePage> {
 
     return Scaffold(
       appBar: const _AppBar(title: '时间线'),
-      body: CustomScrollView(
-        controller: _scroll,
-        reverse: true,                 // ✅ 关键：首帧在底部，滚动方向与系统一致
-        cacheExtent: 1200,            // 预取，减小滚动加载感
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.all(4),
-            sliver: SliverGrid(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final asset = _assets[index]; // 新->旧
-                  return GestureDetector(
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => _Viewer(asset: asset)),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: AssetEntityImage(
-                        asset,
-                        isOriginal: false,
-                        thumbnailSize: const ThumbnailSize.square(300),
-                        fit: BoxFit.cover,
-                        alignment: Alignment.center, // 居中裁切，贴近照片App
+      body: NotificationListener<ScrollNotification>(
+        onNotification: (n) {
+          if (n is UserScrollNotification) {
+            // 更新滚动状态（辅助节流）
+            _isScrolling = n.direction != ScrollDirection.idle;
+            if (!_isScrolling && mounted) setState(() {});
+          }
+          return false;
+        },
+        child: CustomScrollView(
+          controller: _scroll,
+          reverse: true,              // ✅ 首帧在底部，向上看更旧
+          cacheExtent: 1200,          // 预取，降低加载感
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.all(4),
+              sliver: SliverGrid(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final asset = _assets[index]; // 新→旧
+                    return GestureDetector(
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => _Viewer(asset: asset)),
                       ),
-                    ),
-                  );
-                },
-                childCount: _assets.length,
-              ),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 4,
-                mainAxisSpacing: 2,
-                crossAxisSpacing: 2,
+                      child: _ProgressiveThumb(
+                        asset,
+                        // 滚动中只显示低清；停止后再升级高清
+                        enableHigh: !_isScrolling,
+                      ),
+                    );
+                  },
+                  childCount: _assets.length,
+                ),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 4,
+                  mainAxisSpacing: 2,
+                  crossAxisSpacing: 2,
+                ),
               ),
             ),
-          ),
 
-          // 顶部加载条（reverse=true 时显示在“视觉顶部”）
-          SliverToBoxAdapter(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              child: _loadingMore
-                  ? const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: Center(child: SizedBox(
-                        width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
-                    )
-                  : const SizedBox.shrink(),
+            // 顶部分页指示（reverse=true 下可视顶部）
+            SliverToBoxAdapter(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 180),
+                child: _loadingMore
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Center(
+                          child: SizedBox(
+                            width: 20, height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
+/// 缩略图“渐进清晰”组件：先低清（轻模糊）→ 再淡入高清
+class _ProgressiveThumb extends StatefulWidget {
+  const _ProgressiveThumb(this.asset, {this.low = 120, this.high = 300, this.enableHigh = true});
+  final AssetEntity asset;
+  final int low;     // 低清边长
+  final int high;    // 高清边长
+  final bool enableHigh; // 是否启用高清层（滚动中可关闭）
+
+  @override
+  State<_ProgressiveThumb> createState() => _ProgressiveThumbState();
+}
+
+class _ProgressiveThumbState extends State<_ProgressiveThumb> {
+  bool _hiReady = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final low = ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: ImageFiltered(
+        imageFilter: ui.ImageFilter.blur(sigmaX: 1.2, sigmaY: 1.2),
+        child: Image(
+          image: AssetEntityImageProvider(
+            widget.asset,
+            isOriginal: false,
+            thumbnailSize: ThumbnailSize.square(widget.low),
+          ),
+          fit: BoxFit.cover,
+          alignment: Alignment.center, // 与照片 App 一致：居中裁切
+        ),
+      ),
+    );
+
+    // 高清层：用 frameBuilder 侦测首帧解码完成后淡入
+    final high = ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: Image(
+        image: AssetEntityImageProvider(
+          widget.asset,
+          isOriginal: false,
+          thumbnailSize: ThumbnailSize.square(widget.high),
+        ),
+        fit: BoxFit.cover,
+        alignment: Alignment.center,
+        frameBuilder: (context, child, frame, wasSyncLoaded) {
+          if (frame != null && !_hiReady) {
+            // 首帧到了，触发淡入
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) setState(() => _hiReady = true);
+            });
+          }
+          return AnimatedOpacity(
+            duration: const Duration(milliseconds: 160),
+            opacity: _hiReady ? 1 : 0,
+            child: child,
+          );
+        },
+      ),
+    );
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        low,
+        if (widget.enableHigh) high,
+      ],
+    );
+  }
+}
+
+/// 顶部 AppBar
 class _AppBar extends StatelessWidget implements PreferredSizeWidget {
   const _AppBar({required this.title});
   final String title;
@@ -223,6 +318,7 @@ class _AppBar extends StatelessWidget implements PreferredSizeWidget {
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 }
 
+/// 查看页：先中清(1024) → 再原图淡入
 class _Viewer extends StatelessWidget {
   const _Viewer({required this.asset});
   final AssetEntity asset;
@@ -231,13 +327,52 @@ class _Viewer extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(asset.title ?? '查看')),
-      body: Center(
-        child: AssetEntityImage(
-          asset,
-          isOriginal: true, // 查看页按需拉原片
-          fit: BoxFit.contain,
-        ),
-      ),
+      body: Center(child: _ProgressiveOriginal(asset)),
     );
+  }
+}
+
+class _ProgressiveOriginal extends StatefulWidget {
+  const _ProgressiveOriginal(this.asset);
+  final AssetEntity asset;
+
+  @override
+  State<_ProgressiveOriginal> createState() => _ProgressiveOriginalState();
+}
+
+class _ProgressiveOriginalState extends State<_ProgressiveOriginal> {
+  bool _oriReady = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final mid = Image(
+      image: AssetEntityImageProvider(
+        widget.asset,
+        isOriginal: false,
+        thumbnailSize: const ThumbnailSize(1024, 1024),
+      ),
+      fit: BoxFit.contain,
+      alignment: Alignment.center,
+    );
+
+    final ori = Image(
+      image: AssetEntityImageProvider(widget.asset, isOriginal: true),
+      fit: BoxFit.contain,
+      alignment: Alignment.center,
+      frameBuilder: (context, child, frame, wasSyncLoaded) {
+        if (frame != null && !_oriReady) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) setState(() => _oriReady = true);
+          });
+        }
+        return AnimatedOpacity(
+          duration: const Duration(milliseconds: 180),
+          opacity: _oriReady ? 1 : 0,
+          child: child,
+        );
+      },
+    );
+
+    return Stack(fit: StackFit.expand, children: [mid, ori]);
   }
 }
