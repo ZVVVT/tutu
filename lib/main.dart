@@ -10,6 +10,9 @@ import 'services/folder_access.dart';
 import 'services/media_scanner.dart';
 import 'services/thumbnail_cache.dart';
 
+import 'features/timeline/timeline_page.dart';
+
+
 void main() {
   runApp(const TutuApp());
 }
@@ -21,7 +24,7 @@ class TutuApp extends StatelessWidget {
     return MaterialApp(
       title: 'Tutu',
       theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.blue),
-      home: const HomePage(),
+      home: const TimelinePage(),
     );
   }
 }
