@@ -1,6 +1,6 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollDirection; // ✅ 正确来源
+import 'package:flutter/rendering.dart' show ScrollDirection; // 正确来源
 import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 
@@ -9,7 +9,7 @@ import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 /// - 视图 reverse: true，首帧位于底部
 /// - 向“上”滚动时分页加载更旧
 /// - 缩略图/原图采用“渐进清晰”（先糊后清）
-/// - 排序按“元数据创建时间”并用 id 做二级稳定排序
+/// - 排序按“元数据创建时间”；二级稳定排序用 Dart 端的 asset.id
 class TimelinePage extends StatefulWidget {
   const TimelinePage({super.key});
   @override
@@ -50,6 +50,15 @@ class _TimelinePageState extends State<TimelinePage> {
     super.dispose();
   }
 
+  // Dart 端稳定排序：先按创建时间降序；同时间戳按 id 降序
+  void _stableSortDesc(List<AssetEntity> list) {
+    list.sort((a, b) {
+      final c = b.createDateTime.compareTo(a.createDateTime); // 新→旧
+      if (c != 0) return c;
+      return b.id.compareTo(a.id); // 二级保障稳定
+    });
+  }
+
   Future<void> _loadFirstPage() async {
     setState(() {
       _loading = true;
@@ -68,14 +77,13 @@ class _TimelinePageState extends State<TimelinePage> {
       return;
     }
 
-    // 仅取系统“所有照片/Recent”，按元数据创建时间【降序】（新→旧），并用 id 做二级稳定排序
+    // 仅取系统“所有照片/Recent”，按元数据创建时间【降序】（新→旧）
     final paths = await PhotoManager.getAssetPathList(
       type: RequestType.common,
       onlyAll: true,
       filterOption: FilterOptionGroup(
         orders: const [
-          OrderOption(type: OrderOptionType.createDate, asc: false), // 新→旧（元数据日期）
-          OrderOption(type: OrderOptionType.id,         asc: false), // 次排序，保证稳定
+          OrderOption(type: OrderOptionType.createDate, asc: false),
         ],
       ),
     );
@@ -91,8 +99,9 @@ class _TimelinePageState extends State<TimelinePage> {
     final first = await p.getAssetListPaged(page: _nextPage, size: _pageSize);
     _nextPage++;
 
-    // 过滤异常日期（极少数资源缺失/损坏元数据）
+    // 过滤异常日期 + 稳定排序
     final valid = first.where((a) => a.createDateTime.year > 1970).toList();
+    _stableSortDesc(valid);
 
     setState(() {
       _assets.addAll(valid);            // 新→旧
@@ -129,8 +138,7 @@ class _TimelinePageState extends State<TimelinePage> {
       onlyAll: true,
       filterOption: FilterOptionGroup(
         orders: const [
-          OrderOption(type: OrderOptionType.createDate, asc: false), // 新→旧（元数据日期）
-          OrderOption(type: OrderOptionType.id,         asc: false), // 次排序，保证稳定
+          OrderOption(type: OrderOptionType.createDate, asc: false),
         ],
       ),
     );
@@ -146,8 +154,8 @@ class _TimelinePageState extends State<TimelinePage> {
     final chunk = await p.getAssetListPaged(page: _nextPage, size: _pageSize);
     _nextPage++;
 
-    // 过滤异常日期
     final valid = chunk.where((a) => a.createDateTime.year > 1970).toList();
+    _stableSortDesc(valid);
 
     // 追加到尾部（reverse=true 下“视觉上方”），不会影响底部稳定性
     setState(() {
@@ -190,14 +198,14 @@ class _TimelinePageState extends State<TimelinePage> {
       body: NotificationListener<ScrollNotification>(
         onNotification: (n) {
           if (n is UserScrollNotification) {
-            _isScrolling = n.direction != ScrollDirection.idle; // ✅ 需要 ScrollDirection
+            _isScrolling = n.direction != ScrollDirection.idle;
             if (!_isScrolling && mounted) setState(() {});
           }
           return false;
         },
         child: CustomScrollView(
           controller: _scroll,
-          reverse: true,              // ✅ 首帧在底部，向上看更旧
+          reverse: true,              // 首帧在底部，向上看更旧
           cacheExtent: 1200,          // 预取，降低加载感
           slivers: [
             SliverPadding(
@@ -256,7 +264,7 @@ class _ProgressiveThumb extends StatefulWidget {
   final AssetEntity asset;
   final bool enableHigh;
 
-  // 统一常量（移除可选参数，避免“未使用参数”告警）
+  // 统一常量
   static const int lowEdge = 120;
   static const int highEdge = 300;
 
@@ -280,7 +288,7 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
             thumbnailSize: const ThumbnailSize.square(_ProgressiveThumb.lowEdge),
           ),
           fit: BoxFit.cover,
-          alignment: Alignment.center, // 与照片 App 一致：居中裁切
+          alignment: Alignment.center, // 居中裁切
         ),
       ),
     );
