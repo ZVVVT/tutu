@@ -11,31 +11,41 @@ class TutuFolderBridge {
 
   static Future<Map<String, dynamic>?> pickDirectory() async {
     if (!_isIOS) return null;
-    final res = await _m.invokeMethod<Map>('pickDirectory');
+    final Map<Object?, Object?>? res = await _m.invokeMethod<Map<Object?, Object?>>('pickDirectory');
     if (res == null) return null;
     return Map<String, dynamic>.from(res);
   }
 
   static Future<Map<String, dynamic>?> openDirectory(String path) async {
     if (!_isIOS) return null;
-    final res = await _m.invokeMethod<Map>('openDirectory', {'path': path});
+    final Map<Object?, Object?>? res = await _m.invokeMethod<Map<Object?, Object?>>(
+      'openDirectory',
+      {'path': path},
+    );
     if (res == null) return null;
     return Map<String, dynamic>.from(res);
   }
 
   static Future<bool> revokeAccess(String identifier) async {
     if (!_isIOS) return false;
-    final res = await _m.invokeMethod<bool>('revokeAccess', {'id': identifier});
+    final bool? res = await _m.invokeMethod<bool>('revokeAccess', {'id': identifier});
     return res ?? false;
   }
 
   static Future<List<Map<String, dynamic>>> listBookmarks() async {
     if (!_isIOS) return const [];
-    final res = await _m.invokeMethod<List>('listBookmarks');
+    final List<Object?>? res = await _m.invokeMethod<List<Object?>>('listBookmarks');
     if (res == null) return const [];
-    return res.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    return res
+        .whereType<Map>()
+        .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
   }
 
-  static Stream<Map<String, dynamic>> get folderChanges =>
-      _isIOS ? _e.receiveBroadcastStream() : const Stream.empty();
+  static Stream<Map<String, dynamic>> get folderChanges => _isIOS
+      ? _e
+          .receiveBroadcastStream()
+          .where((e) => e != null)
+          .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e as Map))
+      : const Stream<Map<String, dynamic>>.empty();
 }
