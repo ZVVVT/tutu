@@ -335,13 +335,24 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
 
 /// 顶部 AppBar
 class _AppBar extends StatelessWidget implements PreferredSizeWidget {
-  const _AppBar({required this.title, this.height = 44});
+  const _AppBar({required this.title, this.height = 44}); // iOS 常用 44
   final String title;
+  final double height;
+
   @override
-  Widget build(BuildContext context) => AppBar(title: Text(title));
+  Size get preferredSize => Size.fromHeight(height);
+
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+  Widget build(BuildContext context) {
+    return AppBar(
+      title: Text(title),
+      toolbarHeight: height,   // 👈 真正控制高度
+      centerTitle: true,       // 可选：标题居中
+      // elevation: 0,          // 可选：去阴影
+    );
+  }
 }
+
 
 /// 查看页：先中清(1024) → 再原图淡入
 class _Viewer extends StatelessWidget {
