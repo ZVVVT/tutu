@@ -150,12 +150,15 @@ class _TimelinePageState extends State<TimelinePage> {
                         MaterialPageRoute(builder: (_) => _Viewer(asset: asset)),
                       );
                     },
-                    child: AssetEntityImage(
-                      asset,
-                      isOriginal: false,
-                      thumbnailSize: const ThumbnailSize.square(300),
-                      fit: BoxFit.cover,
-                      alignment: Alignment.bottomCenter, // 观感更像“照片”
+                    child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4), // 可选：小圆角，更贴近系统
+                        child: AssetEntityImage(
+                            asset,
+                            isOriginal: false,
+                            thumbnailSize: const ThumbnailSize.square(300),
+                            fit: BoxFit.cover,               // 保持覆盖裁切
+                            alignment: Alignment.center,     // 关键：居中显示
+                        ),
                     ),
                   );
                 },
