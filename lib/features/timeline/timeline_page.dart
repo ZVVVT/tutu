@@ -106,6 +106,7 @@ class _TimelinePageState extends State<TimelinePage> {
   }
 
   void _onScroll() {
+    // 仅用于“渐进清晰”，与 AppBar 无关（AppBar 现在不随滚动改变）
     _isScrolling = true;
     _lastScroll = DateTime.now();
     Future.delayed(const Duration(milliseconds: 120), () {
@@ -157,20 +158,16 @@ class _TimelinePageState extends State<TimelinePage> {
 
   @override
   Widget build(BuildContext context) {
-    // 顶部透明度：0 更透，1 最实（约 120px 内过渡完）
-    final double barOpacity =
-        _scroll.hasClients ? (_scroll.offset / 120.0).clamp(0.0, 1.0) : 0.0;
-
     if (_loading) {
       return Scaffold(
-        appBar: _GlassAppBar(title: '时间线', height: 44, opacity: 1.0),
+        appBar: const _GlassAppBar(title: '时间线', height: 44),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_denyReason != null) {
       return Scaffold(
-        appBar: _GlassAppBar(title: '时间线', height: 44, opacity: 1.0),
+        appBar: const _GlassAppBar(title: '时间线', height: 44),
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -188,8 +185,8 @@ class _TimelinePageState extends State<TimelinePage> {
     }
 
     return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: _GlassAppBar(title: '时间线', height: 44, opacity: barOpacity),
+      extendBodyBehindAppBar: true,                    // 内容延伸到 AppBar 背后
+      appBar: const _GlassAppBar(title: '时间线', height: 44), // 始终相同的渐变 & 毛玻璃
       body: Directionality(
         textDirection: TextDirection.rtl, // 行内右→左
         child: NotificationListener<ScrollNotification>(
@@ -327,18 +324,16 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
   }
 }
 
-
-/// 毛玻璃 + 纯渐变透明（顶部更实 → 底部 100% 透明，连“模糊”也在底部为 0）
+/// 毛玻璃 + 纯渐变透明 AppBar（上实→下全透；不随滚动变化）
+/// 注意：用 ShaderMask 裁剪 BackdropFilter 的模糊，让底部也完全“无模糊”。
 class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _GlassAppBar({
     required this.title,
     this.height = 44,
-    this.opacity = 1.0, // 0~1，随滚动传入
   });
 
   final String title;
   final double height;
-  final double opacity;
 
   @override
   Size get preferredSize => Size.fromHeight(height);
@@ -346,7 +341,6 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final o = opacity.clamp(0.0, 1.0);
 
     return AppBar(
       title: Text(title),
@@ -359,30 +353,29 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // 1) 毛玻璃层：用 ShaderMask 把模糊强度从上到下裁剪为 1→0
+            // 毛玻璃层：用 ShaderMask 让模糊从上到下 1→0
             ShaderMask(
               shaderCallback: (rect) => const LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Colors.white, Colors.transparent], // 顶部显示，底部裁成 0
+                colors: [Colors.white, Colors.transparent],
                 stops: [0.0, 1.0],
               ).createShader(rect),
-              blendMode: BlendMode.dstIn, // 用 mask 的 alpha 作为目标透明度
+              blendMode: BlendMode.dstIn,
               child: BackdropFilter(
                 filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
                 child: const SizedBox.expand(),
               ),
             ),
-
-            // 2) 颜色渐变：顶部随滚动更“实”，到底部完全 0
+            // 颜色渐变：顶部不透明 → 底部完全透明
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    scheme.surface.withValues(alpha: 1.0 * o), // 顶部不透明度随 o
-                    scheme.surface.withValues(alpha: 0.0),      // 底部 100% 透明
+                    scheme.surface.withValues(alpha: 1.0),
+                    scheme.surface.withValues(alpha: 0.0),
                   ],
                   stops: const [0.0, 1.0],
                 ),
@@ -394,8 +387,6 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
-
-
 
 /// 查看页：先中清(1024) → 再原图淡入
 class _Viewer extends StatelessWidget {
