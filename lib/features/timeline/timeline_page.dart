@@ -4,6 +4,9 @@ import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 
+import 'package:flutter/services.dart'; // SystemUiOverlayStyle.light
+
+
 /// 与系统“照片”一致：
 /// - 新 → 旧（降序）
 /// - reverse: true（首帧在底部，上滑更旧）
@@ -324,12 +327,12 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
   }
 }
 
-/// 毛玻璃 + 黑色→透明 渐变（底部完全透明；不随滚动变化）
+/// 毛玻璃 + 黑→透明 渐变（底部 100% 透明；不随滚动变化）
 class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _GlassAppBar({
     required this.title,
     this.height = 44,
-    this.topAlpha = 0.60, // 顶部黑色不透明度，0~1，可按需调 0.45~0.70
+    this.topAlpha = 0.60, // 顶部黑色不透明度，建议 0.55~0.70
   });
 
   final String title;
@@ -342,34 +345,29 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     return AppBar(
-      // 文字/返回箭头均用浅色，以适配黑色覆盖
+      // 文本/图标改为浅色，适配黑色覆盖
       foregroundColor: Colors.white,
       iconTheme: const IconThemeData(color: Colors.white),
-      titleTextStyle: Theme.of(context)
-          .textTheme
-          .titleLarge
-          ?.copyWith(color: Colors.white),
+      titleTextStyle:
+          Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
       title: Text(title),
       centerTitle: true,
       toolbarHeight: height,
       elevation: 0,
       backgroundColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
-      // 状态栏图标改为浅色（iOS 顶部电量/时间变白）
-      systemOverlayStyle: ui.PlatformDispatcher.instance.platformBrightness ==
-              Brightness.dark
-          ? SystemUiOverlayStyle.light // 深色模式也保持浅色状态栏更接近照片App
-          : SystemUiOverlayStyle.light,
+      // 状态栏也用浅色（时间/信号/电量为白色）
+      systemOverlayStyle: SystemUiOverlayStyle.light,
       flexibleSpace: ClipRect(
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // 1) 毛玻璃：用 ShaderMask 让底部模糊=0（完全透明）
+            // 1) 毛玻璃：底部用 ShaderMask 把模糊裁成 0，确保“完全透明”
             ShaderMask(
               shaderCallback: (rect) => const LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Colors.white, Colors.transparent], // 顶部显、底部裁
+                colors: [Colors.white, Colors.transparent],
                 stops: [0.0, 1.0],
               ).createShader(rect),
               blendMode: BlendMode.dstIn,
@@ -378,7 +376,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
                 child: const SizedBox.expand(),
               ),
             ),
-            // 2) 颜色覆盖：黑色 → 完全透明
+            // 2) 颜色覆盖：顶部黑色 → 底部完全透明
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -386,7 +384,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
                   end: Alignment.bottomCenter,
                   colors: [
                     Colors.black.withOpacity(topAlpha), // 顶部更“实”的黑
-                    Colors.black.withOpacity(0.0),       // 底部 100% 透明
+                    Colors.black.withOpacity(0.0),      // 底部 100% 透明
                   ],
                   stops: const [0.0, 1.0],
                 ),
