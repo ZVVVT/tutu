@@ -168,15 +168,15 @@ class _TimelinePageState extends State<TimelinePage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        appBar: _AppBar(title: '时间线'),
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        appBar: const _GlassAppBar(title: '时间线', height: 44),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_denyReason != null) {
       return Scaffold(
-        appBar: const _AppBar(title: '时间线'),
+        appBar: const _GlassAppBar(title: '时间线', height: 44),
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -195,7 +195,7 @@ class _TimelinePageState extends State<TimelinePage> {
 
     return Scaffold(
       extendBodyBehindAppBar: true,                           // ✅ 让内容延伸到 AppBar 背后
-      appBar: const _GlassAppBar(title: '时间线', height: 44), // ✅ 毛玻璃 + 渐变透明
+      appBar: _GlassAppBar(title: '时间线', height: 44), // ✅ 毛玻璃 + 渐变透明
       body: Directionality(
         textDirection: TextDirection.rtl,
         child: NotificationListener<ScrollNotification>(
