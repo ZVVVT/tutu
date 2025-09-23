@@ -210,29 +210,33 @@ class _TimelinePageState extends State<TimelinePage> {
           slivers: [
             SliverPadding(
               padding: const EdgeInsets.all(4),
-              sliver: SliverGrid(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final asset = _assets[index]; // 新→旧
-                    return GestureDetector(
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => _Viewer(asset: asset)),
-                      ),
-                      child: _ProgressiveThumb(
-                        asset,
-                        enableHigh: !_isScrolling, // 滚动中只显示低清；停止后再升级高清
-                      ),
-                    );
-                  },
-                  childCount: _assets.length,
-                ),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 4,
-                  mainAxisSpacing: 2,
-                  crossAxisSpacing: 2,
+              sliver: Directionality(                    // 👈 新增：整网格按 RTL 排布
+                textDirection: TextDirection.rtl,
+                child: SliverGrid(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final asset = _assets[index]; // 仍是新→旧数据
+                      return GestureDetector(
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => _Viewer(asset: asset)),
+                        ),
+                        child: _ProgressiveThumb(
+                          asset,
+                          enableHigh: !_isScrolling,
+                        ),
+                      );
+                    },
+                    childCount: _assets.length,
+                  ),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 4,
+                    mainAxisSpacing: 2,
+                    crossAxisSpacing: 2,
+                  ),
                 ),
               ),
             ),
+
 
             // 顶部分页指示（reverse=true 下可视顶部）
             SliverToBoxAdapter(
