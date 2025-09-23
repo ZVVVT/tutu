@@ -194,8 +194,8 @@ class _TimelinePageState extends State<TimelinePage> {
     }
 
     return Scaffold(
-      appBar: const _AppBar(title: '时间线'),
-      // 👇 关键：用 RTL 包住整个 CustomScrollView，使每一行按 右→左 排列
+      extendBodyBehindAppBar: true,                           // ✅ 让内容延伸到 AppBar 背后
+      appBar: const _GlassAppBar(title: '时间线', height: 44), // ✅ 毛玻璃 + 渐变透明
       body: Directionality(
         textDirection: TextDirection.rtl,
         child: NotificationListener<ScrollNotification>(
@@ -334,25 +334,71 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
 }
 
 /// 顶部 AppBar（固定高度 44）
-class _AppBar extends StatelessWidget implements PreferredSizeWidget {
-  const _AppBar({required this.title});
-  final String title;
+// class _AppBar extends StatelessWidget implements PreferredSizeWidget {
+//   const _AppBar({required this.title});
+//   final String title;
 
-  static const double kHeight = 44;
+//   static const double kHeight = 44;
+
+//   @override
+//   Size get preferredSize => const Size.fromHeight(kHeight);
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return AppBar(
+//       title: Text(title),
+//       toolbarHeight: kHeight,
+//       centerTitle: true,
+//       // elevation: 0,
+//     );
+//   }
+// }
+
+
+/// 毛玻璃 + 渐变透明 AppBar（与照片 App 风格接近）
+class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
+  const _GlassAppBar({required this.title, this.height = 44});
+  final String title;
+  final double height;
 
   @override
-  Size get preferredSize => const Size.fromHeight(kHeight);
+  Size get preferredSize => Size.fromHeight(height);
 
   @override
   Widget build(BuildContext context) {
+    final surface = Theme.of(context).colorScheme.surface;
+
     return AppBar(
       title: Text(title),
-      toolbarHeight: kHeight,
       centerTitle: true,
-      // elevation: 0,
+      toolbarHeight: height,
+      elevation: 0,
+      backgroundColor: Colors.transparent,     // 透明底
+      surfaceTintColor: Colors.transparent,     // M3 去除附加色
+      flexibleSpace: ClipRect(
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12), // 毛玻璃
+          child: Container(
+            // 纵向由不透明→半透明→全透明，露出下面内容
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  surface.withValues(alpha: 0.90),
+                  surface.withValues(alpha: 0.60),
+                  surface.withValues(alpha: 0.00),
+                ],
+                stops: const [0.0, 0.7, 1.0],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
+
 
 
 
