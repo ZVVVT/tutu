@@ -1,6 +1,6 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart' show ScrollDirection; // ✅ 显式引入
+import 'package:flutter/rendering.dart' show ScrollDirection; // ✅ 正确来源
 import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 
