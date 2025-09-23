@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart' show ScrollDirection; // ✅ 显式引入
 import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 
@@ -176,8 +177,7 @@ class _TimelinePageState extends State<TimelinePage> {
       body: NotificationListener<ScrollNotification>(
         onNotification: (n) {
           if (n is UserScrollNotification) {
-            // 更新滚动状态（辅助节流）
-            _isScrolling = n.direction != ScrollDirection.idle;
+            _isScrolling = n.direction != ScrollDirection.idle; // ✅ 需要 ScrollDirection
             if (!_isScrolling && mounted) setState(() {});
           }
           return false;
@@ -199,8 +199,7 @@ class _TimelinePageState extends State<TimelinePage> {
                       ),
                       child: _ProgressiveThumb(
                         asset,
-                        // 滚动中只显示低清；停止后再升级高清
-                        enableHigh: !_isScrolling,
+                        enableHigh: !_isScrolling, // 滚动中只显示低清；停止后再升级高清
                       ),
                     );
                   },
@@ -240,11 +239,13 @@ class _TimelinePageState extends State<TimelinePage> {
 
 /// 缩略图“渐进清晰”组件：先低清（轻模糊）→ 再淡入高清
 class _ProgressiveThumb extends StatefulWidget {
-  const _ProgressiveThumb(this.asset, {this.low = 120, this.high = 300, this.enableHigh = true});
+  const _ProgressiveThumb(this.asset, {this.enableHigh = true});
   final AssetEntity asset;
-  final int low;     // 低清边长
-  final int high;    // 高清边长
-  final bool enableHigh; // 是否启用高清层（滚动中可关闭）
+  final bool enableHigh;
+
+  // 统一常量（移除可选参数，避免“未使用参数”告警）
+  static const int lowEdge = 120;
+  static const int highEdge = 300;
 
   @override
   State<_ProgressiveThumb> createState() => _ProgressiveThumbState();
@@ -263,7 +264,7 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
           image: AssetEntityImageProvider(
             widget.asset,
             isOriginal: false,
-            thumbnailSize: ThumbnailSize.square(widget.low),
+            thumbnailSize: const ThumbnailSize.square(_ProgressiveThumb.lowEdge),
           ),
           fit: BoxFit.cover,
           alignment: Alignment.center, // 与照片 App 一致：居中裁切
@@ -278,13 +279,12 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
         image: AssetEntityImageProvider(
           widget.asset,
           isOriginal: false,
-          thumbnailSize: ThumbnailSize.square(widget.high),
+          thumbnailSize: const ThumbnailSize.square(_ProgressiveThumb.highEdge),
         ),
         fit: BoxFit.cover,
         alignment: Alignment.center,
         frameBuilder: (context, child, frame, wasSyncLoaded) {
           if (frame != null && !_hiReady) {
-            // 首帧到了，触发淡入
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) setState(() => _hiReady = true);
             });
