@@ -335,7 +335,7 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
 
 /// 顶部 AppBar
 class _AppBar extends StatelessWidget implements PreferredSizeWidget {
-  const _AppBar({required this.title});
+  const _AppBar({required this.title, this.height = 44});
   final String title;
   @override
   Widget build(BuildContext context) => AppBar(title: Text(title));
