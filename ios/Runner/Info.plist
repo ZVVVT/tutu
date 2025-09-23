@@ -47,5 +47,13 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>用于读取您的相册与视频，生成时间线与搜索。</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>用于将处理后的媒体保存回系统相册。</string>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+
+
 </dict>
 </plist>
