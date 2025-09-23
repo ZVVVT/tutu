@@ -1,15 +1,14 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollDirection; // 正确来源
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 
 /// 与系统“照片”一致：
 /// - 新 → 旧（降序）
-/// - 视图 reverse: true，首帧位于底部
-/// - 向“上”滚动时分页加载更旧
-/// - 缩略图/原图采用“渐进清晰”（先糊后清）
-/// - 排序按“元数据创建时间”；二级稳定排序用 Dart 端的 asset.id
+/// - reverse: true（首帧在底部，上滑更旧）
+/// - 行内右→左
+/// - 缩略图渐进清晰
 class TimelinePage extends StatefulWidget {
   const TimelinePage({super.key});
   @override
@@ -19,20 +18,20 @@ class TimelinePage extends StatefulWidget {
 class _TimelinePageState extends State<TimelinePage> {
   final ScrollController _scroll = ScrollController();
 
-  // 加载状态
-  bool _loading = true;       // 首屏加载
-  bool _loadingMore = false;  // 顶部分页加载
-  bool _noMore = false;       // 没有更多旧内容
+  // 状态
+  bool _loading = true;
+  bool _loadingMore = false;
+  bool _noMore = false;
   String? _denyReason;
 
   // 数据
   final List<AssetEntity> _assets = [];
 
-  // 分页参数（可按需要调小/调大）
+  // 分页
   static const int _pageSize = 200;
   int _nextPage = 0;
 
-  // 滚动节流：滚动中只渲染低清，停止 120ms 后再升级高清
+  // 滚动节流（停止 120ms 后再升高清）
   bool _isScrolling = false;
   DateTime _lastScroll = DateTime.fromMillisecondsSinceEpoch(0);
 
@@ -50,12 +49,12 @@ class _TimelinePageState extends State<TimelinePage> {
     super.dispose();
   }
 
-  // Dart 端稳定排序：先按创建时间降序；同时间戳按 id 降序
+  // 稳定排序：按创建时间降序；同秒按 id 降序
   void _stableSortDesc(List<AssetEntity> list) {
     list.sort((a, b) {
-      final c = b.createDateTime.compareTo(a.createDateTime); // 新→旧
+      final c = b.createDateTime.compareTo(a.createDateTime);
       if (c != 0) return c;
-      return b.id.compareTo(a.id); // 二级保障稳定
+      return b.id.compareTo(a.id);
     });
   }
 
@@ -77,14 +76,11 @@ class _TimelinePageState extends State<TimelinePage> {
       return;
     }
 
-    // 仅取系统“所有照片/Recent”，按元数据创建时间【降序】（新→旧）
     final paths = await PhotoManager.getAssetPathList(
       type: RequestType.common,
       onlyAll: true,
-      filterOption: FilterOptionGroup(
-        orders: const [
-          OrderOption(type: OrderOptionType.createDate, asc: false),
-        ],
+      filterOption: const FilterOptionGroup(
+        orders: [OrderOption(type: OrderOptionType.createDate, asc: false)],
       ),
     );
     if (paths.isEmpty) {
@@ -99,19 +95,17 @@ class _TimelinePageState extends State<TimelinePage> {
     final first = await p.getAssetListPaged(page: _nextPage, size: _pageSize);
     _nextPage++;
 
-    // 过滤异常日期 + 稳定排序
     final valid = first.where((a) => a.createDateTime.year > 1970).toList();
     _stableSortDesc(valid);
 
     setState(() {
-      _assets.addAll(valid);            // 新→旧
+      _assets.addAll(valid);
       _loading = false;
       _noMore = valid.length < _pageSize;
     });
   }
 
   void _onScroll() {
-    // 轻量节流：记录滚动中状态，降低高清替换频率
     _isScrolling = true;
     _lastScroll = DateTime.now();
     Future.delayed(const Duration(milliseconds: 120), () {
@@ -124,7 +118,6 @@ class _TimelinePageState extends State<TimelinePage> {
     if (_loadingMore || _noMore || !_scroll.hasClients) return;
 
     final pos = _scroll.position;
-    // reverse=true：视觉“顶部”是 pos.maxScrollExtent。逼近时加载更多旧数据
     final bool nearTop = pos.pixels >= (pos.maxScrollExtent - 1000);
     if (nearTop) _loadMore();
   }
@@ -136,10 +129,8 @@ class _TimelinePageState extends State<TimelinePage> {
     final paths = await PhotoManager.getAssetPathList(
       type: RequestType.common,
       onlyAll: true,
-      filterOption: FilterOptionGroup(
-        orders: const [
-          OrderOption(type: OrderOptionType.createDate, asc: false),
-        ],
+      filterOption: const FilterOptionGroup(
+        orders: [OrderOption(type: OrderOptionType.createDate, asc: false)],
       ),
     );
     if (paths.isEmpty) {
@@ -157,7 +148,6 @@ class _TimelinePageState extends State<TimelinePage> {
     final valid = chunk.where((a) => a.createDateTime.year > 1970).toList();
     _stableSortDesc(valid);
 
-    // 追加到尾部（reverse=true 下“视觉上方”），不会影响底部稳定性
     setState(() {
       _assets.addAll(valid);
       _loadingMore = false;
@@ -167,16 +157,20 @@ class _TimelinePageState extends State<TimelinePage> {
 
   @override
   Widget build(BuildContext context) {
+    // 顶部透明度：0 更透，1 最实（约 120px 内过渡完）
+    final double barOpacity =
+        _scroll.hasClients ? (_scroll.offset / 120.0).clamp(0.0, 1.0) : 0.0;
+
     if (_loading) {
       return Scaffold(
-        appBar: const _GlassAppBar(title: '时间线', height: 44),
+        appBar: _GlassAppBar(title: '时间线', height: 44, opacity: 1.0),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_denyReason != null) {
       return Scaffold(
-        appBar: const _GlassAppBar(title: '时间线', height: 44),
+        appBar: _GlassAppBar(title: '时间线', height: 44, opacity: 1.0),
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -194,10 +188,10 @@ class _TimelinePageState extends State<TimelinePage> {
     }
 
     return Scaffold(
-      extendBodyBehindAppBar: true,                           // ✅ 让内容延伸到 AppBar 背后
-      appBar: _GlassAppBar(title: '时间线', height: 44), // ✅ 毛玻璃 + 渐变透明
+      extendBodyBehindAppBar: true,
+      appBar: _GlassAppBar(title: '时间线', height: 44, opacity: barOpacity),
       body: Directionality(
-        textDirection: TextDirection.rtl,
+        textDirection: TextDirection.rtl, // 行内右→左
         child: NotificationListener<ScrollNotification>(
           onNotification: (n) {
             if (n is UserScrollNotification) {
@@ -208,22 +202,22 @@ class _TimelinePageState extends State<TimelinePage> {
           },
           child: CustomScrollView(
             controller: _scroll,
-            reverse: true,              // 首帧在底部，向上看更旧
-            cacheExtent: 1200,          // 预取，降低加载感
+            reverse: true,         // 自底向上
+            cacheExtent: 1200,
             slivers: [
               SliverPadding(
                 padding: const EdgeInsets.all(4),
                 sliver: SliverGrid(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
-                      final asset = _assets[index]; // 仍是新→旧数据
+                      final asset = _assets[index]; // 新→旧
                       return GestureDetector(
                         onTap: () => Navigator.of(context).push(
                           MaterialPageRoute(builder: (_) => _Viewer(asset: asset)),
                         ),
                         child: _ProgressiveThumb(
                           asset,
-                          enableHigh: !_isScrolling, // 滚动中只显示低清；停止后再升级高清
+                          enableHigh: !_isScrolling,
                         ),
                       );
                     },
@@ -237,7 +231,7 @@ class _TimelinePageState extends State<TimelinePage> {
                 ),
               ),
 
-              // 顶部分页指示（reverse=true 下可视顶部）
+              // 顶部分页指示（reverse 下的“顶部”）
               SliverToBoxAdapter(
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 180),
@@ -262,13 +256,12 @@ class _TimelinePageState extends State<TimelinePage> {
   }
 }
 
-/// 缩略图“渐进清晰”组件：先低清（轻模糊）→ 再淡入高清
+/// 缩略图“渐进清晰”：先低清（轻模糊）→ 再淡入高清
 class _ProgressiveThumb extends StatefulWidget {
   const _ProgressiveThumb(this.asset, {this.enableHigh = true});
   final AssetEntity asset;
   final bool enableHigh;
 
-  // 统一常量
   static const int lowEdge = 120;
   static const int highEdge = 300;
 
@@ -289,22 +282,23 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
           image: AssetEntityImageProvider(
             widget.asset,
             isOriginal: false,
-            thumbnailSize: const ThumbnailSize.square(_ProgressiveThumb.lowEdge),
+            thumbnailSize:
+                const ThumbnailSize.square(_ProgressiveThumb.lowEdge),
           ),
           fit: BoxFit.cover,
-          alignment: Alignment.center, // 居中裁切
+          alignment: Alignment.center,
         ),
       ),
     );
 
-    // 高清层：用 frameBuilder 侦测首帧解码完成后淡入
     final high = ClipRRect(
       borderRadius: BorderRadius.circular(4),
       child: Image(
         image: AssetEntityImageProvider(
           widget.asset,
           isOriginal: false,
-          thumbnailSize: const ThumbnailSize.square(_ProgressiveThumb.highEdge),
+          thumbnailSize:
+              const ThumbnailSize.square(_ProgressiveThumb.highEdge),
         ),
         fit: BoxFit.cover,
         alignment: Alignment.center,
@@ -333,74 +327,77 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
   }
 }
 
-/// 顶部 AppBar（固定高度 44）
-// class _AppBar extends StatelessWidget implements PreferredSizeWidget {
-//   const _AppBar({required this.title});
-//   final String title;
-
-//   static const double kHeight = 44;
-
-//   @override
-//   Size get preferredSize => const Size.fromHeight(kHeight);
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return AppBar(
-//       title: Text(title),
-//       toolbarHeight: kHeight,
-//       centerTitle: true,
-//       // elevation: 0,
-//     );
-//   }
-// }
-
-
-/// 毛玻璃 + 渐变透明 AppBar（与照片 App 风格接近）
+/// 毛玻璃 + 渐变透明 AppBar（随滚动变实，更接近系统“照片”）
 class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const _GlassAppBar({required this.title, this.height = 44});
+  const _GlassAppBar({
+    required this.title,
+    this.height = 44,
+    this.opacity = 1.0, // 0~1
+  });
+
   final String title;
   final double height;
+  final double opacity;
 
   @override
   Size get preferredSize => Size.fromHeight(height);
 
   @override
   Widget build(BuildContext context) {
-    final surface = Theme.of(context).colorScheme.surface;
+    final scheme = Theme.of(context).colorScheme;
+    final o = opacity.clamp(0.0, 1.0);
 
     return AppBar(
       title: Text(title),
       centerTitle: true,
       toolbarHeight: height,
       elevation: 0,
-      backgroundColor: Colors.transparent,     // 透明底
-      surfaceTintColor: Colors.transparent,     // M3 去除附加色
+      backgroundColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
       flexibleSpace: ClipRect(
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12), // 毛玻璃
-          child: Container(
-            // 纵向由不透明→半透明→全透明，露出下面内容
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  surface.withValues(alpha: 0.90),
-                  surface.withValues(alpha: 0.60),
-                  surface.withValues(alpha: 0.00),
-                ],
-                stops: const [0.0, 0.7, 1.0],
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // 1) 毛玻璃（略强）
+            BackdropFilter(
+              filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: const SizedBox.expand(),
+            ),
+            // 2) 纵向渐变：上实下透；随滚动叠加透明度
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    scheme.surface.withValues(alpha: 0.88 * o),
+                    scheme.surface.withValues(alpha: 0.60 * o),
+                    scheme.surface.withValues(alpha: 0.00 * o),
+                  ],
+                  stops: const [0.0, 0.6, 1.0],
+                ),
               ),
             ),
-          ),
+            // 3) 轻微高光蒙层，增强磨砂质感
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: scheme.onSurface.withValues(alpha: 0.02 * o),
+              ),
+            ),
+            // 4) 底部分隔线（随滚动显现）
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: Container(
+                height: 0.5,
+                color: scheme.onSurface.withValues(alpha: 0.10 * o),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
-
-
-
 
 /// 查看页：先中清(1024) → 再原图淡入
 class _Viewer extends StatelessWidget {
