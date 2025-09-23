@@ -9,6 +9,7 @@ import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 /// - 视图 reverse: true，首帧位于底部
 /// - 向“上”滚动时分页加载更旧
 /// - 缩略图/原图采用“渐进清晰”（先糊后清）
+/// - 排序按“元数据创建时间”并用 id 做二级稳定排序
 class TimelinePage extends StatefulWidget {
   const TimelinePage({super.key});
   @override
@@ -67,12 +68,15 @@ class _TimelinePageState extends State<TimelinePage> {
       return;
     }
 
-    // 仅取系统“所有照片/Recent”，按创建时间【降序】（新→旧）
+    // 仅取系统“所有照片/Recent”，按元数据创建时间【降序】（新→旧），并用 id 做二级稳定排序
     final paths = await PhotoManager.getAssetPathList(
       type: RequestType.common,
       onlyAll: true,
       filterOption: FilterOptionGroup(
-        orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
+        orders: const [
+          OrderOption(type: OrderOptionType.createDate, asc: false), // 新→旧（元数据日期）
+          OrderOption(type: OrderOptionType.id,         asc: false), // 次排序，保证稳定
+        ],
       ),
     );
     if (paths.isEmpty) {
@@ -87,10 +91,13 @@ class _TimelinePageState extends State<TimelinePage> {
     final first = await p.getAssetListPaged(page: _nextPage, size: _pageSize);
     _nextPage++;
 
+    // 过滤异常日期（极少数资源缺失/损坏元数据）
+    final valid = first.where((a) => a.createDateTime.year > 1970).toList();
+
     setState(() {
-      _assets.addAll(first);            // 新→旧
+      _assets.addAll(valid);            // 新→旧
       _loading = false;
-      _noMore = first.length < _pageSize;
+      _noMore = valid.length < _pageSize;
     });
   }
 
@@ -121,7 +128,10 @@ class _TimelinePageState extends State<TimelinePage> {
       type: RequestType.common,
       onlyAll: true,
       filterOption: FilterOptionGroup(
-        orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
+        orders: const [
+          OrderOption(type: OrderOptionType.createDate, asc: false), // 新→旧（元数据日期）
+          OrderOption(type: OrderOptionType.id,         asc: false), // 次排序，保证稳定
+        ],
       ),
     );
     if (paths.isEmpty) {
@@ -136,11 +146,14 @@ class _TimelinePageState extends State<TimelinePage> {
     final chunk = await p.getAssetListPaged(page: _nextPage, size: _pageSize);
     _nextPage++;
 
+    // 过滤异常日期
+    final valid = chunk.where((a) => a.createDateTime.year > 1970).toList();
+
     // 追加到尾部（reverse=true 下“视觉上方”），不会影响底部稳定性
     setState(() {
-      _assets.addAll(chunk);
+      _assets.addAll(valid);
       _loadingMore = false;
-      if (chunk.length < _pageSize) _noMore = true;
+      if (valid.length < _pageSize) _noMore = true;
     });
   }
 
