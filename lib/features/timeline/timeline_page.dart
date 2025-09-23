@@ -4,7 +4,7 @@ import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 
-import 'package:flutter/services.dart'; // SystemUiOverlayStyle.light
+// import 'package:flutter/services.dart'; // SystemUiOverlayStyle.light
 
 
 /// 与系统“照片”一致：
