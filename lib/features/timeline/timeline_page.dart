@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 
-/// 时间线：与系统“照片”一致 —— 最新在底部，从底部开始往上浏览
+/// 与系统“照片”一致：
+/// - 新 -> 旧（降序）
+/// - 视图 reverse: true，首帧出现在底部
+/// - 向“上”滚动时分页加载更旧的资源
 class TimelinePage extends StatefulWidget {
   const TimelinePage({super.key});
   @override
@@ -12,26 +15,40 @@ class TimelinePage extends StatefulWidget {
 class _TimelinePageState extends State<TimelinePage> {
   final ScrollController _scroll = ScrollController();
 
-  bool _loading = true;
+  bool _loading = true;           // 首次加载
+  bool _loadingMore = false;      // 顶部追加分页
+  bool _noMore = false;           // 已无更多数据
   String? _denyReason;
-  List<AssetEntity> _assets = [];
 
-  bool _anchoredOnce = false; // 首次布局后只锚底一次
+  final List<AssetEntity> _assets = [];
+
+  // 分页参数
+  static const int _pageSize = 200;
+  int _nextPage = 0; // getAssetListPaged(page: _nextPage)
 
   @override
   void initState() {
     super.initState();
-    _loadAssets();
+    _loadFirstPage();
+    _scroll.addListener(_onScroll);
   }
 
-  Future<void> _loadAssets() async {
+  @override
+  void dispose() {
+    _scroll.removeListener(_onScroll);
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadFirstPage() async {
     setState(() {
       _loading = true;
       _denyReason = null;
-      _anchoredOnce = false;
+      _nextPage = 0;
+      _noMore = false;
+      _assets.clear();
     });
 
-    // 申请权限
     final ps = await PhotoManager.requestPermissionExtend();
     if (!ps.hasAccess) {
       setState(() {
@@ -41,60 +58,78 @@ class _TimelinePageState extends State<TimelinePage> {
       return;
     }
 
-    // 只取“所有照片(Recent)”这一个路径，按创建时间【升序】（旧→新）
+    // 只取“所有照片/Recent”，并按创建时间【降序】（新 -> 旧）
     final paths = await PhotoManager.getAssetPathList(
       type: RequestType.common,
-      onlyAll: true, // 关键：系统所有照片聚合
+      onlyAll: true,
       filterOption: FilterOptionGroup(
-        orders: [const OrderOption(type: OrderOptionType.createDate, asc: true)],
+        orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
       ),
     );
-
     if (paths.isEmpty) {
       setState(() {
-        _assets = const [];
         _loading = false;
+        _noMore = true;
       });
       return;
     }
 
-    // 先取前 N 页做首屏（升序，最新在最后），后续可做分页
-    final List<AssetEntity> all = [];
     final p = paths.first;
-    // 取前 3 页、每页 200（可按需调整）
-    for (int page = 0; page < 3; page++) {
-      final chunk = await p.getAssetListPaged(page: page, size: 200);
-      if (chunk.isEmpty) break;
-      all.addAll(chunk);
-    }
 
+    // 首次只取一页，保证首帧快；reverse 渲染，首帧直接在底部，无需跳转
+    final first = await p.getAssetListPaged(page: _nextPage, size: _pageSize);
+    _nextPage++;
     setState(() {
-      _assets = all;
+      _assets.addAll(first);
       _loading = false;
-    });
-
-    _anchorToBottomOnce();
-  }
-
-  void _anchorToBottomOnce() {
-    if (_anchoredOnce) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scroll.hasClients) return;
-      _scroll.jumpTo(_scroll.position.maxScrollExtent);
-      _anchoredOnce = true;
+      _noMore = first.length < _pageSize;
     });
   }
 
-  @override
-  void dispose() {
-    _scroll.dispose();
-    super.dispose();
+  // 监听向上滚动接近“顶部”时加载更多（reverse: true -> 视觉顶部 = 滚动距离接近 maxScrollExtent）
+  void _onScroll() {
+    if (_loadingMore || _noMore || !_scroll.hasClients) return;
+
+    final pos = _scroll.position;
+    // 距离“视觉顶部”小于 1000 像素时触发下一页
+    final bool nearTop = pos.pixels >= (pos.maxScrollExtent - 1000);
+    if (nearTop) _loadMore();
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || _noMore) return;
+    setState(() => _loadingMore = true);
+
+    // 仍按创建时间【降序】分页（与首屏一致）
+    final paths = await PhotoManager.getAssetPathList(
+      type: RequestType.common,
+      onlyAll: true,
+      filterOption: FilterOptionGroup(
+        orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
+      ),
+    );
+    if (paths.isEmpty) {
+      setState(() {
+        _loadingMore = false;
+        _noMore = true;
+      });
+      return;
+    }
+    final p = paths.first;
+
+    final chunk = await p.getAssetListPaged(page: _nextPage, size: _pageSize);
+    _nextPage++;
+
+    // 在 reverse 视图下，追加到列表尾部 = 视觉上的“上方”，不会影响底部稳定性
+    setState(() {
+      _assets.addAll(chunk);
+      _loadingMore = false;
+      if (chunk.length < _pageSize) _noMore = true;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     if (_loading) {
       return const Scaffold(
         appBar: _AppBar(title: '时间线'),
@@ -102,31 +137,19 @@ class _TimelinePageState extends State<TimelinePage> {
       );
     }
 
-    if (_denyReason != null || _assets.isEmpty) {
+    if (_denyReason != null) {
       return Scaffold(
         appBar: const _AppBar(title: '时间线'),
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (_denyReason != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                  child: Text(
-                    '无法访问相册：$_denyReason\n请在“设置 > 隐私 > 照片”中允许访问。',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                )
-              else
-                Text('没有可显示的照片或视频', style: theme.textTheme.bodyMedium),
-              const SizedBox(height: 12),
+              Text('无法访问相册：$_denyReason', textAlign: TextAlign.center),
+              const SizedBox(height: 8),
               FilledButton(
                 onPressed: () => PhotoManager.openSetting(),
                 child: const Text('去设置'),
               ),
-              const SizedBox(height: 8),
-              OutlinedButton(onPressed: _loadAssets, child: const Text('重试')),
             ],
           ),
         ),
@@ -137,28 +160,28 @@ class _TimelinePageState extends State<TimelinePage> {
       appBar: const _AppBar(title: '时间线'),
       body: CustomScrollView(
         controller: _scroll,
+        reverse: true,                 // ✅ 关键：首帧在底部，滚动方向与系统一致
+        cacheExtent: 1200,            // 预取，减小滚动加载感
         slivers: [
           SliverPadding(
             padding: const EdgeInsets.all(4),
             sliver: SliverGrid(
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
-                  final asset = _assets[index];
+                  final asset = _assets[index]; // 新->旧
                   return GestureDetector(
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => _Viewer(asset: asset)),
-                      );
-                    },
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => _Viewer(asset: asset)),
+                    ),
                     child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4), // 可选：小圆角，更贴近系统
-                        child: AssetEntityImage(
-                            asset,
-                            isOriginal: false,
-                            thumbnailSize: const ThumbnailSize.square(300),
-                            fit: BoxFit.cover,               // 保持覆盖裁切
-                            alignment: Alignment.center,     // 关键：居中显示
-                        ),
+                      borderRadius: BorderRadius.circular(4),
+                      child: AssetEntityImage(
+                        asset,
+                        isOriginal: false,
+                        thumbnailSize: const ThumbnailSize.square(300),
+                        fit: BoxFit.cover,
+                        alignment: Alignment.center, // 居中裁切，贴近照片App
+                      ),
                     ),
                   );
                 },
@@ -169,6 +192,20 @@ class _TimelinePageState extends State<TimelinePage> {
                 mainAxisSpacing: 2,
                 crossAxisSpacing: 2,
               ),
+            ),
+          ),
+
+          // 顶部加载条（reverse=true 时显示在“视觉顶部”）
+          SliverToBoxAdapter(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: _loadingMore
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12),
+                      child: Center(child: SizedBox(
+                        width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+                    )
+                  : const SizedBox.shrink(),
             ),
           ),
         ],
