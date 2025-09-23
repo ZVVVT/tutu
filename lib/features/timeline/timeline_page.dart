@@ -195,24 +195,25 @@ class _TimelinePageState extends State<TimelinePage> {
 
     return Scaffold(
       appBar: const _AppBar(title: '时间线'),
-      body: NotificationListener<ScrollNotification>(
-        onNotification: (n) {
-          if (n is UserScrollNotification) {
-            _isScrolling = n.direction != ScrollDirection.idle;
-            if (!_isScrolling && mounted) setState(() {});
-          }
-          return false;
-        },
-        child: CustomScrollView(
-          controller: _scroll,
-          reverse: true,              // 首帧在底部，向上看更旧
-          cacheExtent: 1200,          // 预取，降低加载感
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.all(4),
-              sliver: Directionality(                    // 👈 新增：整网格按 RTL 排布
-                textDirection: TextDirection.rtl,
-                child: SliverGrid(
+      // 👇 关键：用 RTL 包住整个 CustomScrollView，使每一行按 右→左 排列
+      body: Directionality(
+        textDirection: TextDirection.rtl,
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (n) {
+            if (n is UserScrollNotification) {
+              _isScrolling = n.direction != ScrollDirection.idle;
+              if (!_isScrolling && mounted) setState(() {});
+            }
+            return false;
+          },
+          child: CustomScrollView(
+            controller: _scroll,
+            reverse: true,              // 首帧在底部，向上看更旧
+            cacheExtent: 1200,          // 预取，降低加载感
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.all(4),
+                sliver: SliverGrid(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
                       final asset = _assets[index]; // 仍是新→旧数据
@@ -222,7 +223,7 @@ class _TimelinePageState extends State<TimelinePage> {
                         ),
                         child: _ProgressiveThumb(
                           asset,
-                          enableHigh: !_isScrolling,
+                          enableHigh: !_isScrolling, // 滚动中只显示低清；停止后再升级高清
                         ),
                       );
                     },
@@ -235,27 +236,26 @@ class _TimelinePageState extends State<TimelinePage> {
                   ),
                 ),
               ),
-            ),
 
-
-            // 顶部分页指示（reverse=true 下可视顶部）
-            SliverToBoxAdapter(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 180),
-                child: _loadingMore
-                    ? const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: Center(
-                          child: SizedBox(
-                            width: 20, height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+              // 顶部分页指示（reverse=true 下可视顶部）
+              SliverToBoxAdapter(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 180),
+                  child: _loadingMore
+                      ? const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Center(
+                            child: SizedBox(
+                              width: 20, height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
                           ),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
+                        )
+                      : const SizedBox.shrink(),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
