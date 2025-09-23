@@ -332,12 +332,12 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _GlassAppBar({
     required this.title,
     this.height = 44,
-    this.topAlpha = 0.60, // 顶部黑色不透明度，建议 0.55~0.70
   });
 
   final String title;
   final double height;
-  final double topAlpha;
+
+  static const double _kTopAlpha = 0.60; // 顶部黑色强度
 
   @override
   Size get preferredSize => Size.fromHeight(height);
@@ -345,7 +345,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     return AppBar(
-      // 文本/图标改为浅色，适配黑色覆盖
+      // 文字/图标浅色，适配黑色覆盖
       foregroundColor: Colors.white,
       iconTheme: const IconThemeData(color: Colors.white),
       titleTextStyle:
@@ -356,8 +356,8 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
       elevation: 0,
       backgroundColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
-      // 状态栏也用浅色（时间/信号/电量为白色）
-      systemOverlayStyle: SystemUiOverlayStyle.light,
+      // 如需白色状态栏图标，取消下一行注释并确保已 import 'package:flutter/services.dart';
+      // systemOverlayStyle: SystemUiOverlayStyle.light,
       flexibleSpace: ClipRect(
         child: Stack(
           fit: StackFit.expand,
@@ -376,15 +376,15 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
                 child: const SizedBox.expand(),
               ),
             ),
-            // 2) 颜色覆盖：顶部黑色 → 底部完全透明
+            // 2) 颜色覆盖：顶部黑色 → 底部完全透明（用 withValues 避免弃用告警）
             DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withOpacity(topAlpha), // 顶部更“实”的黑
-                    Colors.black.withOpacity(0.0),      // 底部 100% 透明
+                    Colors.black.withValues(alpha: _kTopAlpha),
+                    Colors.black.withValues(alpha: 0.0),
                   ],
                   stops: const [0.0, 1.0],
                 ),
@@ -396,6 +396,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
+
 
 
 /// 查看页：先中清(1024) → 再原图淡入
