@@ -79,7 +79,7 @@ class _TimelinePageState extends State<TimelinePage> {
     final paths = await PhotoManager.getAssetPathList(
       type: RequestType.common,
       onlyAll: true,
-      filterOption: const FilterOptionGroup(
+      filterOption: FilterOptionGroup(
         orders: [OrderOption(type: OrderOptionType.createDate, asc: false)],
       ),
     );
@@ -129,7 +129,7 @@ class _TimelinePageState extends State<TimelinePage> {
     final paths = await PhotoManager.getAssetPathList(
       type: RequestType.common,
       onlyAll: true,
-      filterOption: const FilterOptionGroup(
+      filterOption: FilterOptionGroup(
         orders: [OrderOption(type: OrderOptionType.createDate, asc: false)],
       ),
     );
