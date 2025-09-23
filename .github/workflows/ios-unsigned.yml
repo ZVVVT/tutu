@@ -3,7 +3,16 @@
 on:
   push:
     branches: [ main ]
+    paths:
+      - "ios/**"
+      - "lib/**"
+      - "pubspec.yaml"
+      - ".github/workflows/**"
   workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-ios:
@@ -16,58 +25,34 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          cache: true
 
-      - name: Doctor
-        run: |
-          flutter --version
-          flutter doctor -v
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            ios/Pods
+            ~/Library/Caches/CocoaPods
+          key: ${{ runner.os }}-pods-${{ hashFiles('**/Podfile.lock') }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
 
-      - name: Flutter pub get
+      - name: Flutter Pub Get
         run: flutter pub get
 
-      - name: Precache iOS artifacts
-        run: flutter precache --ios
-
-      - name: Install CocoaPods
-        run: sudo gem install cocoapods -NV
-
-      - name: Pod install (with repo update)
-        run: |
-          cd ios
-          pod repo update
-          pod install --repo-update
-
-      # 可选：先用 Xcode 原生命令做一次“仅编译”，能把第一条编译错误暴露出来（排错更清晰）
-      - name: Xcode build (compile only, no codesign)
+      - name: CocoaPods Install
         run: |
           set -euxo pipefail
           cd ios
-          xcodebuild -list -workspace Runner.xcworkspace
-          xcodebuild \
-            -workspace Runner.xcworkspace \
-            -scheme Runner \
-            -configuration Release \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            COMPILER_INDEX_STORE_ENABLE=NO | tee ../xcodebuild.compile.log
-          cd ..
+          pod install --repo-update
 
-      - name: Upload compile log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: xcodebuild-compile-log
-          path: xcodebuild.compile.log
+      - name: Analyze
+        run: flutter analyze
 
-      # 用 Flutter 产出 Runner.app（无签名）
-      - name: Build iOS app (no codesign)
-        run: flutter build ios --release --no-codesign -v
+      - name: Build iOS (no codesign)
+        run: flutter build ios --release --no-codesign
 
-      # 手工打包 unsigned IPA：Payload/Runner.app -> Runner.ipa
+      # 手动把 .app 打成未签名 IPA
       - name: Package unsigned IPA
         run: |
           set -euxo pipefail

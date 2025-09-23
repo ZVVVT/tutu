@@ -34,7 +34,7 @@ post_install do |installer|
     flutter_additional_ios_build_settings(target)
     # 统一把所有 Pods 的最低版本提升到 13.0，避免兼容性冲突
     target.build_configurations.each do |config|
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
       # 关闭索引防止日志冗长
       config.build_settings['COMPILER_INDEX_STORE_ENABLE'] = 'NO'
     end
