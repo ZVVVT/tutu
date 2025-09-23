@@ -2,10 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:photo_manager_image_provider/photo_manager_image_provider.dart';
 
-/// 系统相册时间线（首版最小可运行）
-/// - 首次进入请求相册权限
-/// - 加载最近的图片/视频缩略图（按创建时间倒序）
-/// - 点开查看原图
+/// 时间线：与系统“照片”一致 —— 最新在底部，从底部开始往上浏览
 class TimelinePage extends StatefulWidget {
   const TimelinePage({super.key});
   @override
@@ -13,9 +10,13 @@ class TimelinePage extends StatefulWidget {
 }
 
 class _TimelinePageState extends State<TimelinePage> {
+  final ScrollController _scroll = ScrollController();
+
   bool _loading = true;
+  String? _denyReason;
   List<AssetEntity> _assets = [];
-  String? _denyReason; // 用于展示拒绝/受限情况
+
+  bool _anchoredOnce = false; // 首次布局后只锚底一次
 
   @override
   void initState() {
@@ -27,9 +28,11 @@ class _TimelinePageState extends State<TimelinePage> {
     setState(() {
       _loading = true;
       _denyReason = null;
+      _anchoredOnce = false;
     });
 
-    final PermissionState ps = await PhotoManager.requestPermissionExtend();
+    // 申请权限
+    final ps = await PhotoManager.requestPermissionExtend();
     if (!ps.hasAccess) {
       setState(() {
         _loading = false;
@@ -38,25 +41,54 @@ class _TimelinePageState extends State<TimelinePage> {
       return;
     }
 
-    // 取所有相册路径（图片+视频），按创建时间倒序
-    final List<AssetPathEntity> paths = await PhotoManager.getAssetPathList(
+    // 只取“所有照片(Recent)”这一个路径，按创建时间【升序】（旧→新）
+    final paths = await PhotoManager.getAssetPathList(
       type: RequestType.common,
+      onlyAll: true, // 关键：系统所有照片聚合
       filterOption: FilterOptionGroup(
-        orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
+        orders: [const OrderOption(type: OrderOptionType.createDate, asc: true)],
       ),
     );
 
+    if (paths.isEmpty) {
+      setState(() {
+        _assets = const [];
+        _loading = false;
+      });
+      return;
+    }
+
+    // 先取前 N 页做首屏（升序，最新在最后），后续可做分页
     final List<AssetEntity> all = [];
-    // 先取每个目录前 300 项做首屏（足够丝滑）
-    for (final p in paths) {
-      final page = await p.getAssetListPaged(page: 0, size: 300);
-      all.addAll(page);
+    final p = paths.first;
+    // 取前 3 页、每页 200（可按需调整）
+    for (int page = 0; page < 3; page++) {
+      final chunk = await p.getAssetListPaged(page: page, size: 200);
+      if (chunk.isEmpty) break;
+      all.addAll(chunk);
     }
 
     setState(() {
       _assets = all;
       _loading = false;
     });
+
+    _anchorToBottomOnce();
+  }
+
+  void _anchorToBottomOnce() {
+    if (_anchoredOnce) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      _scroll.jumpTo(_scroll.position.maxScrollExtent);
+      _anchoredOnce = true;
+    });
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
   }
 
   @override
@@ -70,7 +102,6 @@ class _TimelinePageState extends State<TimelinePage> {
       );
     }
 
-    // 未授权或无资源时的空态
     if (_denyReason != null || _assets.isEmpty) {
       return Scaffold(
         appBar: const _AppBar(title: '时间线'),
@@ -95,10 +126,7 @@ class _TimelinePageState extends State<TimelinePage> {
                 child: const Text('去设置'),
               ),
               const SizedBox(height: 8),
-              OutlinedButton(
-                onPressed: _loadAssets,
-                child: const Text('重试'),
-              ),
+              OutlinedButton(onPressed: _loadAssets, child: const Text('重试')),
             ],
           ),
         ),
@@ -108,6 +136,7 @@ class _TimelinePageState extends State<TimelinePage> {
     return Scaffold(
       appBar: const _AppBar(title: '时间线'),
       body: CustomScrollView(
+        controller: _scroll,
         slivers: [
           SliverPadding(
             padding: const EdgeInsets.all(4),
@@ -126,6 +155,7 @@ class _TimelinePageState extends State<TimelinePage> {
                       isOriginal: false,
                       thumbnailSize: const ThumbnailSize.square(300),
                       fit: BoxFit.cover,
+                      alignment: Alignment.bottomCenter, // 观感更像“照片”
                     ),
                   );
                 },
@@ -148,12 +178,7 @@ class _AppBar extends StatelessWidget implements PreferredSizeWidget {
   const _AppBar({required this.title});
   final String title;
   @override
-  Widget build(BuildContext context) {
-    return AppBar(
-      title: Text(title),
-      centerTitle: false,
-    );
-  }
+  Widget build(BuildContext context) => AppBar(title: Text(title));
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 }
