@@ -55,7 +55,7 @@ class _TimelinePageState extends State<TimelinePage> {
   // 顶部“可点留白”高度（状态栏 + AppBar + 额外缓冲）
   double _topInteractiveGap(BuildContext context) {
     final topSafe = MediaQuery.of(context).padding.top;
-    const double kToolbar = 44; // 与 _GlassAppBar 默认高度保持一致
+    const double kToolbar = 88; // 与 _GlassAppBar 默认高度保持一致
     const double kExtra = 0;    // 手指缓冲，避免误触
     return topSafe + kToolbar + kExtra;
   }
@@ -171,14 +171,14 @@ class _TimelinePageState extends State<TimelinePage> {
   Widget build(BuildContext context) {
     if (_loading) {
       return Scaffold(
-        appBar: const _GlassAppBar(title: '时间线', height: 44),
+        appBar: const _GlassAppBar(title: '时间线', height: 88),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_denyReason != null) {
       return Scaffold(
-        appBar: const _GlassAppBar(title: '时间线', height: 44),
+        appBar: const _GlassAppBar(title: '时间线', height: 88),
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -197,7 +197,7 @@ class _TimelinePageState extends State<TimelinePage> {
 
     return Scaffold(
       extendBodyBehindAppBar: true,                         // 内容延伸到 AppBar 背后
-      appBar: const _GlassAppBar(title: '时间线', height: 44), // 始终相同的渐变 & 毛玻璃
+      appBar: const _GlassAppBar(title: '时间线', height: 88), // 始终相同的渐变 & 毛玻璃
       body: Directionality(
         textDirection: TextDirection.rtl, // 行内右→左
         child: NotificationListener<ScrollNotification>(
@@ -345,14 +345,14 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
 class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _GlassAppBar({
     required this.title,
-    this.height = 44,
+    this.height = 88,
   });
 
   final String title;
   final double height;
 
   // 调节点：
-  static const double _kTopAlpha = 0.80; // 顶部黑色强度（0~1）
+  static const double _kTopAlpha = 1.00; // 顶部黑色强度（0~1）
 
   @override
   Size get preferredSize => Size.fromHeight(height);
