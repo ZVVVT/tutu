@@ -550,62 +550,62 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
 
 /// 内部组件：先生成“被蒙版的内容”（模糊+着色），
 /// 再用与上面相同逻辑计算的动态 stops 生成真正的 Shader。
-class _FeatherMaskedContent extends StatelessWidget {
-  const _FeatherMaskedContent({
-    required this.blurSigma,
-    required this.tintAlpha,
-    required this.extraTint,
-    required this.featherHeight,
-    required this.featherEase,
-  });
+// class _FeatherMaskedContent extends StatelessWidget {
+//   const _FeatherMaskedContent({
+//     required this.blurSigma,
+//     required this.tintAlpha,
+//     required this.extraTint,
+//     required this.featherHeight,
+//     required this.featherEase,
+//   });
 
-  final double blurSigma;
-  final double tintAlpha;
-  final double extraTint;
-  final double featherHeight;
-  final double featherEase;
+//   final double blurSigma;
+//   final double tintAlpha;
+//   final double extraTint;
+//   final double featherHeight;
+//   final double featherEase;
 
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, c) {
-      final double h = c.biggest.height;
-      final double f = featherHeight.clamp(8.0, h);
-      final double beg = (h - f) / h;
-      final double mid = (beg + (featherEase * f / h)).clamp(beg, 0.9999);
+//   @override
+//   Widget build(BuildContext context) {
+//     return LayoutBuilder(builder: (context, c) {
+//       final double h = c.biggest.height;
+//       final double f = featherHeight.clamp(8.0, h);
+//       final double beg = (h - f) / h;
+//       final double mid = (beg + (featherEase * f / h)).clamp(beg, 0.9999);
 
-      // 真正的蒙版（利用 ShaderMask 的父级）需要一个 Shader；这里用
-      // 自定义的 RenderObject 比较繁琐，采用第二个 ShaderMask 覆盖方案：
-      return ShaderMask(
-        blendMode: BlendMode.dstIn,
-        shaderCallback: (rect) {
-          return LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: const [Colors.white, Colors.white, Colors.transparent],
-            stops: [beg.clamp(0.0, 1.0), mid, 1.0],
-          ).createShader(rect);
-        },
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            BackdropFilter(
-              filter: ui.ImageFilter.blur(
-                sigmaX: blurSigma,
-                sigmaY: blurSigma,
-              ),
-              child: const SizedBox.expand(),
-            ),
-            // 第一层统一黑
-            ColoredBox(color: Colors.black.withValues(alpha: tintAlpha)),
-            // 第二层统一黑（可选）
-            if (extraTint > 0)
-              ColoredBox(color: Colors.black.withValues(alpha: extraTint)),
-          ],
-        ),
-      );
-    });
-  }
-}
+//       // 真正的蒙版（利用 ShaderMask 的父级）需要一个 Shader；这里用
+//       // 自定义的 RenderObject 比较繁琐，采用第二个 ShaderMask 覆盖方案：
+//       return ShaderMask(
+//         blendMode: BlendMode.dstIn,
+//         shaderCallback: (rect) {
+//           return LinearGradient(
+//             begin: Alignment.topCenter,
+//             end: Alignment.bottomCenter,
+//             colors: const [Colors.white, Colors.white, Colors.transparent],
+//             stops: [beg.clamp(0.0, 1.0), mid, 1.0],
+//           ).createShader(rect);
+//         },
+//         child: Stack(
+//           fit: StackFit.expand,
+//           children: [
+//             BackdropFilter(
+//               filter: ui.ImageFilter.blur(
+//                 sigmaX: blurSigma,
+//                 sigmaY: blurSigma,
+//               ),
+//               child: const SizedBox.expand(),
+//             ),
+//             // 第一层统一黑
+//             ColoredBox(color: Colors.black.withValues(alpha: tintAlpha)),
+//             // 第二层统一黑（可选）
+//             if (extraTint > 0)
+//               ColoredBox(color: Colors.black.withValues(alpha: extraTint)),
+//           ],
+//         ),
+//       );
+//     });
+//   }
+// }
 
 
 
