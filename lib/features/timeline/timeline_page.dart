@@ -359,31 +359,33 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
   }
 }
 
-// 毛玻璃（大面积）+ 底缘羽化 + 深色着色，且无滚动暗影
+// 毛玻璃（整块）+ 统一轻度着色 + 底缘三段羽化（更柔）
+// 不随滚动变暗、无阴影分隔线
 class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _GlassAppBar({
     required this.title,
-    this.height = 56,        // 工具栏高度
-    this.blurSigma = 20,     // 毛玻璃强度：18–22
-    this.tintAlpha = 0.50,   // 统一轻度着色：0.12–0.18
-    this.featherHeight = 50, // 底缘羽化高度：24–36
+    this.height = 56,        // 工具栏高度（iOS Photos 约 55–56）
+    this.blurSigma = 22,     // 毛玻璃强度：20–24 更像系统
+    this.tintAlpha = 0.12,   // 统一轻度着色：0.10–0.16 越小越通透
+    this.featherHeight = 40, // 底缘羽化高度：34–44 越大越柔
+    this.featherEase = 0.52, // 羽化缓动：0.25–0.60 越大越“软”
   });
 
   final String title;
   final double height;
+
+  // 可调参数
   final double blurSigma;
   final double tintAlpha;
   final double featherHeight;
-
-  // 羽化软硬（0.25–0.55 越大越“软”）
-  final double _featherEase = 0.45;
+  final double featherEase;
 
   @override
   Size get preferredSize => Size.fromHeight(height);
 
   @override
   Widget build(BuildContext context) {
-    final mediaTop = MediaQuery.paddingOf(context).top;
+    final mediaTop = MediaQuery.paddingOf(context).top; // 状态栏高度
     final totalHeight = mediaTop + height;
 
     return AppBar(
@@ -394,42 +396,47 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
       title: Text(title),
       centerTitle: true,
       toolbarHeight: height,
+
+      // 去掉所有阴影/分割线/滚动暗色
       elevation: 0,
       scrolledUnderElevation: 0,
       shadowColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
       backgroundColor: Colors.transparent,
-      // 如需白色状态栏图标：systemOverlayStyle: SystemUiOverlayStyle.light,
+      // 需要白色状态栏图标可打开：
+      // systemOverlayStyle: SystemUiOverlayStyle.light,
 
-      // 方案A：整块毛玻璃 + 统一轻度着色；底缘统一羽化到 0
       flexibleSpace: SizedBox(
         height: totalHeight,
         child: ClipRect(
           child: ShaderMask(
-            blendMode: BlendMode.dstIn, // 用遮罩把底缘羽化成完全透明
+            // 用遮罩把“底缘 featherHeight 区域”羽化到完全透明
+            blendMode: BlendMode.dstIn,
             shaderCallback: (rect) {
-              final h = rect.height;
-              final f = featherHeight.clamp(8, h);
-              final start = (h - f) / h;                   // 羽化起点(0~1)
-              final mid = start + (_featherEase * f / h);  // 过渡中段(更柔)
+              final double h   = rect.height;
+              final double f   = featherHeight.clamp(8, h);
+              final double beg = (h - f) / h;                   // 羽化起点(0~1，从顶部算)
+              final double mid = beg + (featherEase * f / h);   // 过渡中段，决定软硬
 
+              // 三段：1. 完全保留  2. 半保留  3. 透明
               return LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: const [
-                  Colors.white,   // 上方完整保留（有模糊+着色）
-                  Colors.white,   // 中段继续保留，过渡更平顺
-                  Colors.transparent, // 底部完全透明（无模糊+无着色）
+                  Color(0xFFFFFFFF),                 // 完整保留上方的模糊+着色
+                  Color(0xB3FFFFFF),                 // 70% 保留，过渡更顺滑
+                  Color(0x00FFFFFF),                 // 完全透明（无模糊、无着色）
                 ],
                 stops: [
-                  start.clamp(0.0, 1.0),
-                  mid.clamp(0.0, 1.0),
+                  beg.clamp(0.0, 1.0).toDouble(),
+                  mid.clamp(0.0, 1.0).toDouble(),
                   1.0,
                 ],
+                tileMode: TileMode.clamp,
               ).createShader(rect);
             },
 
-            // 被羽化的“内容”：毛玻璃 + 统一轻度着色（没有黑色渐变带）
+            // 被羽化的“内容”：整块毛玻璃 + 统一轻度着色
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -440,11 +447,8 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
                   ),
                   child: const SizedBox.expand(),
                 ),
-                // Flutter 新版：withValues；若报错改 withOpacity
-                ColoredBox(
-                  color: Colors.black.withValues(alpha: tintAlpha),
-                  // 若编译器不支持：改为 Colors.black.withOpacity(tintAlpha),
-                ),
+                // 若你的 Flutter 版本不支持 withValues，就换成 withOpacity(tintAlpha)
+                ColoredBox(color: Colors.black.withValues(alpha: tintAlpha)),
               ],
             ),
           ),
@@ -453,6 +457,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
+
 
 /// 查看页：先中清(1024) → 再原图淡入
 class _Viewer extends StatelessWidget {
