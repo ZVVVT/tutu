@@ -361,119 +361,25 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
 
 // 毛玻璃（整块）+ 统一轻度着色 + 底缘三段羽化（更柔）
 // 不随滚动变暗、无阴影分隔线
-// class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
-//   const _GlassAppBar({
-//     required this.title,
-//     this.height = 56,        // 工具栏高度
-//     this.blurSigma = 24,     // 毛玻璃强度：20–24
-//     this.tintAlpha = 1.0,   // 统一轻度着色：0.10–0.16
-//     this.featherHeight = 34, // 底缘羽化高度：34–44
-//   });
-
-//   final String title;
-//   final double height;
-
-//   // 可调参数
-//   final double blurSigma;
-//   final double tintAlpha;
-//   final double featherHeight;
-
-//   // 羽化软硬（0.25–0.60 越大越“软”）
-//   final double featherEase = 0.52;
-
-//   @override
-//   Size get preferredSize => Size.fromHeight(height);
-
-//   @override
-//   Widget build(BuildContext context) {
-//     final mediaTop = MediaQuery.paddingOf(context).top; // 状态栏高度
-//     final totalHeight = mediaTop + height;
-
-//     return AppBar(
-//       foregroundColor: Colors.white,
-//       iconTheme: const IconThemeData(color: Colors.white),
-//       titleTextStyle:
-//           Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
-//       title: Text(title),
-//       centerTitle: true,
-//       toolbarHeight: height,
-
-//       // 去掉暗影/滚动加深
-//       elevation: 0,
-//       scrolledUnderElevation: 0,
-//       shadowColor: Colors.transparent,
-//       surfaceTintColor: Colors.transparent,
-//       backgroundColor: Colors.transparent,
-//       // 需要白色状态栏图标：systemOverlayStyle: SystemUiOverlayStyle.light,
-
-//       flexibleSpace: SizedBox(
-//         height: totalHeight,
-//         child: ClipRect(
-//           child: ShaderMask(
-//             // 用遮罩把“底缘 featherHeight 区域”羽化到完全透明
-//             blendMode: BlendMode.dstIn,
-//             shaderCallback: (rect) {
-//               final double h   = rect.height;
-//               final double f   = featherHeight.clamp(8, h);
-//               final double beg = (h - f) / h;                 // 羽化起点(0~1)
-//               final double mid = beg + (featherEase * f / h); // 过渡中段(更柔)
-
-//               return LinearGradient(
-//                 begin: Alignment.topCenter,
-//                 end: Alignment.bottomCenter,
-//                 colors: const [
-//                   Color(0xFFFFFFFF),   // 完整保留上方模糊+着色
-//                   Color(0xB3FFFFFF),   // 70% 保留，过渡更顺滑
-//                   Color(0x00FFFFFF),   // 完全透明（无模糊、无着色）
-//                 ],
-//                 stops: [
-//                   beg.clamp(0.0, 1.0).toDouble(),
-//                   mid.clamp(0.0, 1.0).toDouble(),
-//                   1.0,
-//                 ],
-//               ).createShader(rect);
-//             },
-
-//             // 被羽化的“内容”：整块毛玻璃 + 统一轻度着色
-//             child: Stack(
-//               fit: StackFit.expand,
-//               children: [
-//                 BackdropFilter(
-//                   filter: ui.ImageFilter.blur(
-//                     sigmaX: blurSigma,
-//                     sigmaY: blurSigma,
-//                   ),
-//                   child: const SizedBox.expand(),
-//                 ),
-//                 // 如果 withValues 不支持，改成 withOpacity(tintAlpha)
-//                 ColoredBox(color: Colors.black.withValues(alpha: tintAlpha)),
-//               ],
-//             ),
-//           ),
-//         ),
-//       ),
-//     );
-//   }
-// }
-
-
 class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _GlassAppBar({
     required this.title,
     this.height = 56,        // 工具栏高度
-    this.blurSigma = 50,     // 毛玻璃强度：18–24（越大越“黑”）
-    this.tintAlpha = 0.70,   // 统一浅黑着色：0.20–0.40（越大越“黑”）
-    this.featherHeight = 34, // 底缘羽化高度：24–40（越大过渡越长）
+    this.blurSigma = 24,     // 毛玻璃强度：20–24
+    this.tintAlpha = 1.0,   // 统一轻度着色：0.10–0.16
+    this.featherHeight = 34, // 底缘羽化高度：34–44
   });
 
   final String title;
   final double height;
+
+  // 可调参数
   final double blurSigma;
   final double tintAlpha;
   final double featherHeight;
 
-  // 羽化软硬（0.25–0.55 越大越“软”），做成内部常量避免 CI 报“未使用可选参数”
-  static const double _featherEase = 0.45;
+  // 羽化软硬（0.25–0.60 越大越“软”）
+  final double featherEase = 0.52;
 
   @override
   Size get preferredSize => Size.fromHeight(height);
@@ -492,37 +398,43 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
       centerTitle: true,
       toolbarHeight: height,
 
-      // 去掉所有阴影/滚动暗化
+      // 去掉暗影/滚动加深
       elevation: 0,
       scrolledUnderElevation: 0,
       shadowColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
       backgroundColor: Colors.transparent,
-      // 如需白色状态栏图标：systemOverlayStyle: SystemUiOverlayStyle.light,
+      // 需要白色状态栏图标：systemOverlayStyle: SystemUiOverlayStyle.light,
 
-      // 思路：整块毛玻璃 + 统一“浅黑”着色；用遮罩把底缘 featherHeight 区域羽化为全透明
       flexibleSpace: SizedBox(
         height: totalHeight,
         child: ClipRect(
           child: ShaderMask(
-            blendMode: BlendMode.dstIn, // 白=保留模糊+着色；透明=挖掉（完全透明）
+            // 用遮罩把“底缘 featherHeight 区域”羽化到完全透明
+            blendMode: BlendMode.dstIn,
             shaderCallback: (rect) {
               final double h   = rect.height;
-              final double f   = featherHeight.clamp(8.0, h);
-              final double beg = ((h - f) / h).clamp(0.0, 1.0);                     // 羽化起点
-              final double mid = (beg + (_featherEase * f / h)).clamp(beg, 0.9999); // 更柔一点
+              final double f   = featherHeight.clamp(8, h);
+              final double beg = (h - f) / h;                 // 羽化起点(0~1)
+              final double mid = beg + (featherEase * f / h); // 过渡中段(更柔)
 
               return LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: const [
-                  Colors.white,      // 上方完整保留（有模糊+着色）
-                  Colors.white,      // 中段继续保留，平顺过渡
-                  Colors.transparent // 底部完全透明（无模糊+无着色）
+                  Color(0xFFFFFFFF),   // 完整保留上方模糊+着色
+                  Color(0xB3FFFFFF),   // 70% 保留，过渡更顺滑
+                  Color(0x00FFFFFF),   // 完全透明（无模糊、无着色）
                 ],
-                stops: <double>[beg, mid, 1.0],
+                stops: [
+                  beg.clamp(0.0, 1.0).toDouble(),
+                  mid.clamp(0.0, 1.0).toDouble(),
+                  1.0,
+                ],
               ).createShader(rect);
             },
+
+            // 被羽化的“内容”：整块毛玻璃 + 统一轻度着色
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -533,8 +445,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
                   ),
                   child: const SizedBox.expand(),
                 ),
-                // 提升“黑感”：主要靠 tintAlpha；其次提高 blurSigma
-                // 注意：需要 Flutter 3.22+ 才有 withValues；如果你这边编译不过就改成 withOpacity(tintAlpha)
+                // 如果 withValues 不支持，改成 withOpacity(tintAlpha)
                 ColoredBox(color: Colors.black.withValues(alpha: tintAlpha)),
               ],
             ),
@@ -544,6 +455,95 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
+
+
+// class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
+//   const _GlassAppBar({
+//     required this.title,
+//     this.height = 56,        // 工具栏高度
+//     this.blurSigma = 50,     // 毛玻璃强度：18–24（越大越“黑”）
+//     this.tintAlpha = 0.70,   // 统一浅黑着色：0.20–0.40（越大越“黑”）
+//     this.featherHeight = 34, // 底缘羽化高度：24–40（越大过渡越长）
+//   });
+
+//   final String title;
+//   final double height;
+//   final double blurSigma;
+//   final double tintAlpha;
+//   final double featherHeight;
+
+//   // 羽化软硬（0.25–0.55 越大越“软”），做成内部常量避免 CI 报“未使用可选参数”
+//   static const double _featherEase = 0.45;
+
+//   @override
+//   Size get preferredSize => Size.fromHeight(height);
+
+//   @override
+//   Widget build(BuildContext context) {
+//     final mediaTop = MediaQuery.paddingOf(context).top; // 状态栏高度
+//     final totalHeight = mediaTop + height;
+
+//     return AppBar(
+//       foregroundColor: Colors.white,
+//       iconTheme: const IconThemeData(color: Colors.white),
+//       titleTextStyle:
+//           Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
+//       title: Text(title),
+//       centerTitle: true,
+//       toolbarHeight: height,
+
+//       // 去掉所有阴影/滚动暗化
+//       elevation: 0,
+//       scrolledUnderElevation: 0,
+//       shadowColor: Colors.transparent,
+//       surfaceTintColor: Colors.transparent,
+//       backgroundColor: Colors.transparent,
+//       // 如需白色状态栏图标：systemOverlayStyle: SystemUiOverlayStyle.light,
+
+//       // 思路：整块毛玻璃 + 统一“浅黑”着色；用遮罩把底缘 featherHeight 区域羽化为全透明
+//       flexibleSpace: SizedBox(
+//         height: totalHeight,
+//         child: ClipRect(
+//           child: ShaderMask(
+//             blendMode: BlendMode.dstIn, // 白=保留模糊+着色；透明=挖掉（完全透明）
+//             shaderCallback: (rect) {
+//               final double h   = rect.height;
+//               final double f   = featherHeight.clamp(8.0, h);
+//               final double beg = ((h - f) / h).clamp(0.0, 1.0);                     // 羽化起点
+//               final double mid = (beg + (_featherEase * f / h)).clamp(beg, 0.9999); // 更柔一点
+
+//               return LinearGradient(
+//                 begin: Alignment.topCenter,
+//                 end: Alignment.bottomCenter,
+//                 colors: const [
+//                   Colors.white,      // 上方完整保留（有模糊+着色）
+//                   Colors.white,      // 中段继续保留，平顺过渡
+//                   Colors.transparent // 底部完全透明（无模糊+无着色）
+//                 ],
+//                 stops: <double>[beg, mid, 1.0],
+//               ).createShader(rect);
+//             },
+//             child: Stack(
+//               fit: StackFit.expand,
+//               children: [
+//                 BackdropFilter(
+//                   filter: ui.ImageFilter.blur(
+//                     sigmaX: blurSigma,
+//                     sigmaY: blurSigma,
+//                   ),
+//                   child: const SizedBox.expand(),
+//                 ),
+//                 // 提升“黑感”：主要靠 tintAlpha；其次提高 blurSigma
+//                 // 注意：需要 Flutter 3.22+ 才有 withValues；如果你这边编译不过就改成 withOpacity(tintAlpha)
+//                 ColoredBox(color: Colors.black.withValues(alpha: tintAlpha)),
+//               ],
+//             ),
+//           ),
+//         ),
+//       ),
+//     );
+//   }
+// }
 
 
 
