@@ -365,12 +365,13 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
 
 
 
+// ==== 仅替换/保留这一份 _GlassAppBar，删除文件里所有其他版本与 _MultiplyTintLayer ====
 class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _GlassAppBar({
     required this.title,
     this.height = 56,        // 工具栏高度
     this.blurSigma = 22,     // 模糊强度：20–26 更深
-    this.tintAlpha = 0.88,   // 乘性暗化不透明度：0.24–0.35 更黑
+    this.tintAlpha = 0.30,   // 乘性暗化不透明度：0.24–0.35 更黑
     this.featherHeight = 32, // 底缘羽化高度：24–40
   });
 
@@ -380,14 +381,14 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   final double tintAlpha;     // 用于 Multiply 的强度
   final double featherHeight;
 
-  static const double _featherEase = 0.45; // 羽化软硬
+  static const double _featherEase = 0.45; // 羽化软硬（越大越“软”）
 
   @override
   Size get preferredSize => Size.fromHeight(height);
 
   @override
   Widget build(BuildContext context) {
-    final mediaTop = MediaQuery.paddingOf(context).top; // 状态栏高度
+    final mediaTop = MediaQuery.paddingOf(context).top;
     final totalHeight = mediaTop + height;
 
     return AppBar(
@@ -409,7 +410,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
         height: totalHeight,
         child: ClipRect(
           child: ShaderMask(
-            // 用遮罩把底缘 featherHeight 区域羽化成 0（无模糊无着色）
+            // 用遮罩把底缘 featherHeight 区域羽化为透明（下面看不到模糊/着色）
             blendMode: BlendMode.dstIn,
             shaderCallback: (rect) {
               final double h   = rect.height;
@@ -421,18 +422,18 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: const [
-                  Colors.white,      // 上方完整保留（有模糊+暗化）
-                  Colors.white,      // 中段继续保留，平顺过渡
-                  Colors.transparent // 底部完全透明（无模糊+无着色）
+                  Colors.white,      // 上方完整保留（模糊+暗化）
+                  Colors.white,      // 中段继续保留
+                  Colors.transparent // 底部完全透明（无模糊无着色）
                 ],
                 stops: <double>[beg, mid, 1.0],
               ).createShader(rect);
             },
 
-            // ⚠️ 关键：ColorFiltered(multiply) 必须包住 BackdropFilter
+            // 关键：先“乘性暗化”再让 BackdropFilter 定义模糊区域（被上面的 ShaderMask 羽化）
             child: ColorFiltered(
               colorFilter: ColorFilter.mode(
-                // 旧版 Flutter 没有 withValues 就改为 withOpacity(tintAlpha)
+                // 如果你本机不支持 withValues，改为 withOpacity(tintAlpha)
                 Colors.black.withValues(alpha: tintAlpha.clamp(0.0, 1.0)),
                 BlendMode.multiply,
               ),
@@ -453,41 +454,42 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
 
 
 
+
 /// 乘性暗化层：BackdropFilter(模糊) + ColorFiltered(multiply)
-class _MultiplyTintLayer extends StatelessWidget {
-  const _MultiplyTintLayer({
-    required this.blurSigma,
-    required this.multiplyOpacity,
-  });
+// class _MultiplyTintLayer extends StatelessWidget {
+//   const _MultiplyTintLayer({
+//     required this.blurSigma,
+//     required this.multiplyOpacity,
+//   });
 
-  final double blurSigma;
-  final double multiplyOpacity; // 建议 0.20–0.35
+//   final double blurSigma;
+//   final double multiplyOpacity; // 建议 0.20–0.35
 
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        BackdropFilter(
-          filter: ui.ImageFilter.blur(
-            sigmaX: blurSigma,
-            sigmaY: blurSigma,
-          ),
-          child: const SizedBox.expand(),
-        ),
-        // 乘性暗化：比半透明黑覆盖更抗高亮
-        ColorFiltered(
-          colorFilter: ColorFilter.mode(
-            // 用 withValues 去掉弃用提示；如果你本地 SDK 过旧再换回 withOpacity
-            Colors.black.withValues(alpha: multiplyOpacity.clamp(0.0, 1.0)),
-            BlendMode.multiply,
-          ),
-          child: const SizedBox.expand(),
-        ),
-      ],
-    );
-  }
-}
+//   @override
+//   Widget build(BuildContext context) {
+//     return Stack(
+//       fit: StackFit.expand,
+//       children: [
+//         BackdropFilter(
+//           filter: ui.ImageFilter.blur(
+//             sigmaX: blurSigma,
+//             sigmaY: blurSigma,
+//           ),
+//           child: const SizedBox.expand(),
+//         ),
+//         // 乘性暗化：比半透明黑覆盖更抗高亮
+//         ColorFiltered(
+//           colorFilter: ColorFilter.mode(
+//             // 用 withValues 去掉弃用提示；如果你本地 SDK 过旧再换回 withOpacity
+//             Colors.black.withValues(alpha: multiplyOpacity.clamp(0.0, 1.0)),
+//             BlendMode.multiply,
+//           ),
+//           child: const SizedBox.expand(),
+//         ),
+//       ],
+//     );
+//   }
+// }
 
 
 
