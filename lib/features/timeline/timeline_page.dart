@@ -365,8 +365,8 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _GlassAppBar({
     required this.title,
     this.height = 56,        // 工具栏高度
-    this.blurSigma = 22,     // 毛玻璃强度：20–24
-    this.tintAlpha = 0.12,   // 统一轻度着色：0.10–0.16
+    this.blurSigma = 24,     // 毛玻璃强度：20–24
+    this.tintAlpha = 0.20,   // 统一轻度着色：0.10–0.16
     this.featherHeight = 40, // 底缘羽化高度：34–44
   });
 
