@@ -363,21 +363,19 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
 class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _GlassAppBar({
     required this.title,
-    this.height = 56,        // 工具栏高度
-    this.blurSigma = 22,     // 毛玻璃强度：16–22
-    this.tintAlphaTop = 0.58,// 顶部黑色着色强度：0.48–0.62
-    this.featherHeight = 38, // 底缘羽化高度：28–42
+    this.height = 56,
+    this.blurSigma = 20,     // 18–22
+    this.tintAlpha = 0.14,   // 0.12–0.18
+    this.featherHeight = 32, // 24–36
   });
 
   final String title;
   final double height;
-
   final double blurSigma;
-  final double tintAlphaTop;
+  final double tintAlpha;
   final double featherHeight;
 
-  // 内部缓动比例（越大越“软”）
-  final double featherEase = 0.45; // 0.25–0.55
+  final double _featherEase = 0.45; // 0.25–0.55
 
   @override
   Size get preferredSize => Size.fromHeight(height);
@@ -395,103 +393,60 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
       title: Text(title),
       centerTitle: true,
       toolbarHeight: height,
-
-      // 去除阴影/分割线/滚动着色
       elevation: 0,
       scrolledUnderElevation: 0,
       shadowColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
       backgroundColor: Colors.transparent,
-      // 如需白色状态栏图标：
       // systemOverlayStyle: SystemUiOverlayStyle.light,
 
       flexibleSpace: SizedBox(
         height: totalHeight,
         child: ClipRect(
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // 1) 整块毛玻璃
-              BackdropFilter(
-                filter: ui.ImageFilter.blur(
-                  sigmaX: blurSigma,
-                  sigmaY: blurSigma,
-                ),
-                child: const SizedBox.expand(),
-              ),
-
-              // 2) 羽化遮罩（dstIn）：把底部 featherHeight 区域从“有模糊”
-              //    平滑过渡到“完全无模糊”
-              ShaderMask(
-                blendMode: BlendMode.dstIn,
-                shaderCallback: (rect) {
-                  final h = rect.height;
-                  final f = featherHeight.clamp(8, h);
-                  final start = (h - f) / h;                 // 羽化起点(0~1)
-                  final eased = featherEase.clamp(0.15, 0.70);
-                  final mid = start + (eased * f / h);       // 中段过渡点
-
-                  return LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.white,                           // 保留模糊
-                      Colors.white.withValues(alpha: 0.45),   // 半保留
-                      Colors.transparent,                     // 完全无模糊
-                    ],
-                    stops: [
-                      start.clamp(0.0, 1.0),
-                      mid.clamp(0.0, 1.0),
-                      1.0,
-                    ],
-                    tileMode: TileMode.clamp,
-                  ).createShader(rect);
-                },
-                child: const SizedBox.expand(),
-              ),
-
-              // 3) 顶部黑色着色（上深下透），不影响底部 100% 透明
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: tintAlphaTop),
-                      Colors.black.withValues(alpha: 0.0),
-                    ],
-                    stops: const [0.0, 1.0],
-                    tileMode: TileMode.clamp,
+          child: ShaderMask(
+            blendMode: BlendMode.dstIn, // 底缘羽化到 0
+            shaderCallback: (rect) {
+              final h = rect.height;
+              final f = featherHeight.clamp(8, h);
+              final start = (h - f) / h;
+              final mid = start + (_featherEase * f / h);
+              return LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: const [
+                  Colors.white,
+                  Colors.white,           // 中段维持白，过渡更柔
+                  Colors.transparent,
+                ],
+                stops: [
+                  start.clamp(0.0, 1.0),
+                  mid.clamp(0.0, 1.0),
+                  1.0,
+                ],
+              ).createShader(rect);
+            },
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                BackdropFilter(
+                  filter: ui.ImageFilter.blur(
+                    sigmaX: blurSigma,
+                    sigmaY: blurSigma,
                   ),
+                  child: const SizedBox.expand(),
                 ),
-              ),
-
-              // 4) 轻微“接缝柔化”条，减少视觉硬边
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: IgnorePointer(
-                  child: Container(
-                    height: 8, // 6–10 更自然
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black.withValues(alpha: 0.04),
-                          Colors.black.withValues(alpha: 0.0),
-                        ],
-                      ),
-                    ),
-                  ),
+                ColoredBox(
+                  color: Colors.black.withValues(alpha: tintAlpha),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 }
+
 
 
 
