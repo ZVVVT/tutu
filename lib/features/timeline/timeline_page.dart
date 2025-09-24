@@ -461,8 +461,8 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _GlassAppBar({
     required this.title,
     this.height = 56,        // 工具栏高度
-    this.blurSigma = 22,     // 毛玻璃强度：18–24（越大越糊、越“黑”）
-    this.tintAlpha = 0.30,   // 统一着色强度：0.20–0.40（越大越“黑”）
+    this.blurSigma = 22,     // 毛玻璃强度：18–24（越大越“黑”）
+    this.tintAlpha = 0.30,   // 统一浅黑着色：0.20–0.40（越大越“黑”）
     this.featherHeight = 34, // 底缘羽化高度：24–40（越大过渡越长）
   });
 
@@ -472,8 +472,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   final double tintAlpha;
   final double featherHeight;
 
-  // 不再作为“可选参数”，避免 CI 报“optional parameter isn’t ever given”；
-  // 要更软/更硬，直接改这里的数值即可（0.25–0.55 越大越“软”）
+  // 羽化软硬（0.25–0.55 越大越“软”），做成内部常量避免 CI 报“未使用可选参数”
   static const double _featherEase = 0.45;
 
   @override
@@ -508,17 +507,21 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
           child: ShaderMask(
             blendMode: BlendMode.dstIn, // 白=保留模糊+着色；透明=挖掉（完全透明）
             shaderCallback: (rect) {
-              final double h = rect.height;
-              final double f = featherHeight.clamp(8.0, h);
-              final double beg = (h - f) / h;                 // 羽化起点(0~1)
-              final double mid = (beg + (_featherEase * f / h))
-                  .clamp(beg, 0.9999);                        // 中段（更柔）
+              final double h   = rect.height;
+              final double f   = featherHeight.clamp(8.0, h);
+              final double beg = ((h - f) / h).clamp(0.0, 1.0);                     // 羽化起点
+              final double mid = (beg + (_featherEase * f / h)).clamp(beg, 0.9999); // 更柔一点
 
-              return const LinearGradient(
+              return LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Colors.white, Colors.white, Colors.transparent],
-              ).copyWith(stops: <double>[beg, mid, 1.0]).createShader(rect);
+                colors: const [
+                  Colors.white,      // 上方完整保留（有模糊+着色）
+                  Colors.white,      // 中段继续保留，平顺过渡
+                  Colors.transparent // 底部完全透明（无模糊+无着色）
+                ],
+                stops: <double>[beg, mid, 1.0],
+              ).createShader(rect);
             },
             child: Stack(
               fit: StackFit.expand,
@@ -530,7 +533,8 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
                   ),
                   child: const SizedBox.expand(),
                 ),
-                // Flutter 3.22+ 用 withValues；若编译不过，替换为 withOpacity(tintAlpha)
+                // 提升“黑感”：主要靠 tintAlpha；其次提高 blurSigma
+                // 注意：需要 Flutter 3.22+ 才有 withValues；如果你这边编译不过就改成 withOpacity(tintAlpha)
                 ColoredBox(color: Colors.black.withValues(alpha: tintAlpha)),
               ],
             ),
@@ -540,6 +544,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
+
 
 
 
