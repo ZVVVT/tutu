@@ -367,17 +367,15 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.blurSigma = 18,       // 毛玻璃强度（8–24）
     this.tintAlphaTop = 0.55,  // 顶部黑色强度（0.45–0.65）
     this.featherHeight = 32,   // 底缘羽化高度（24–40）
-    this.sideFeather = 12,     // 左右边缘羽化宽度（8–16）
   });
 
   final String title;
   final double height;
 
-  // 可调参数
+  // 可调参数（都在内部使用，且不会引发“未传入”告警）
   final double blurSigma;
   final double tintAlphaTop;
   final double featherHeight;
-  final double sideFeather;
 
   @override
   Size get preferredSize => Size.fromHeight(height);
@@ -387,8 +385,10 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     final mediaTop = MediaQuery.paddingOf(context).top; // 状态栏高度
     final totalHeight = mediaTop + height;
 
+    // 侧向羽化像素（不再作为构造参数暴露）
+    const double _kSideFeatherPx = 12.0;
+
     return AppBar(
-      // 文字/图标保持白色
       foregroundColor: Colors.white,
       iconTheme: const IconThemeData(color: Colors.white),
       titleTextStyle:
@@ -400,7 +400,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
       backgroundColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
       shadowColor: Colors.transparent,
-      scrolledUnderElevation: 0, // ✅ 关闭滚动暗影，避免“黑边”
+      scrolledUnderElevation: 0, // 关闭滚动暗影，避免“黑边”
 
       // 如需白色状态栏图标，解开下一行并在文件顶部 import services.dart
       // systemOverlayStyle: SystemUiOverlayStyle.light,
@@ -423,11 +423,11 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
                 child: IgnorePointer(
                   child: ShaderMask(
                     shaderCallback: (rect) {
-                      return LinearGradient(
+                      return const LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: const [Colors.black, Colors.transparent],
-                        stops: const [0.0, 1.0],
+                        colors: [Colors.black, Colors.transparent],
+                        stops: [0.0, 1.0],
                       ).createShader(
                         Rect.fromLTWH(
                           0, rect.height - featherHeight, rect.width, featherHeight,
@@ -440,10 +440,11 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
                 ),
               ),
 
-              // 3) 深色着色（上深下透），并做左右侧向羽化，避免两侧显得更黑
+              // 3) 深色着色（上深下透）+ 左右侧向羽化
               ShaderMask(
                 shaderCallback: (rect) {
-                  final edge = (sideFeather / rect.width).clamp(0.0, 0.25);
+                  final edge =
+                      (_kSideFeatherPx / rect.width).clamp(0.0, 0.25); // 12px -> 比例
                   return LinearGradient(
                     begin: Alignment.centerLeft,
                     end: Alignment.centerRight,
@@ -453,13 +454,13 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
                     stops: [0.0, edge, 1 - edge, 1.0],
                   ).createShader(rect);
                 },
-                blendMode: BlendMode.dstIn, // 仅保留中间，左右渐隐
+                blendMode: BlendMode.dstIn,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      // 让透明更早结束，避免底缘叠加太重
+                      // 让透明更早结束，避免底缘叠加过深
                       stops: const [0.0, 0.85],
                       colors: [
                         Colors.black.withValues(alpha: tintAlphaTop),
@@ -476,6 +477,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
+
 
 
 /// 查看页：先中清(1024) → 再原图淡入
