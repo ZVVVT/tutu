@@ -462,19 +462,15 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.title,
     this.height = 56,        // 工具栏高度
     this.blurSigma = 22,     // 毛玻璃强度：18–24
-    this.tintAlpha = 0.24,   // 主统一着色：0.20–0.30 越大越“黑”
-    this.extraTint = 0.08,   // 叠加统一着色：0.00–0.12 可微调“再黑一点”
+    this.tintAlpha = 0.28,   // 统一着色强度（越大越“黑”）：0.20–0.40
     this.featherHeight = 34, // 底缘羽化高度：28–40
-    this.featherEase = 0.40, // 羽化软硬：0.25–0.55（越大越“软”）
+    this.featherEase = 0.45, // 羽化软硬：0.25–0.55（越大越“软”）
   });
 
   final String title;
   final double height;
-
-  // 可调参数（都为“统一着色”，不做上下渐变）
   final double blurSigma;
   final double tintAlpha;
-  final double extraTint;
   final double featherHeight;
   final double featherEase;
 
@@ -503,40 +499,39 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
       backgroundColor: Colors.transparent,
       // 如需白色状态栏图标：systemOverlayStyle: SystemUiOverlayStyle.light,
 
-      // 核心：整块模糊 + 统一着色（可叠两层），
-      // 再用两段遮罩把底缘羽化为完全透明；不做上下黑色渐变。
+      // 核心：整块模糊 + 统一着色；用遮罩把“底缘 featherHeight”羽化为全透。
       flexibleSpace: SizedBox(
         height: totalHeight,
         child: ClipRect(
           child: ShaderMask(
-            blendMode: BlendMode.dstIn, // 白=保留模糊+着色；透明=挖掉
+            blendMode: BlendMode
+                .dstIn, // 白=保留（模糊+着色）；透明=挖掉（完全无模糊、无着色）
             shaderCallback: (rect) {
               final double h = rect.height;
-              final double f = featherHeight.clamp(8, h);
+              final double f = featherHeight.clamp(8.0, h);
               final double beg = (h - f) / h;                       // 羽化起点
               final double mid = (beg + (featherEase * f / h))
-                  .clamp(beg, 0.9999);                              // 更柔的过渡点
-              return const LinearGradient(
+                  .clamp(beg, 0.9999);                              // 过渡中段
+              return LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Colors.white, Colors.white, Colors.transparent],
-                // stops 在 paint 时再替换（见下 SizedBox -> ShaderMask 约束）
-              ).createShader(
-                // 我们需要动态 stops，因此先用完整 rect，真正的 stops 通过
-                // GradientRotation/Matrix 无法动态注入，这里直接重建 Shader。
-                // 但要把上面的固定 colors/stops 与动态 stops 对齐：
-                // -> 直接重新 create 一个 LinearGradient（如下）。
-                Rect.zero,
-              );
+                colors: const [Colors.white, Colors.white, Colors.transparent],
+                stops: [beg, mid, 1.0],
+              ).createShader(rect);
             },
-            // 用 childBuilder 方式无法传 stops，这里采用嵌套 Stack 方案：
-            // 先蒙版，再绘制“被蒙版”的内容。
-            child: _FeatherMaskedContent(
-              blurSigma: blurSigma,
-              tintAlpha: tintAlpha,
-              extraTint: extraTint,
-              featherHeight: featherHeight,
-              featherEase: featherEase,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                BackdropFilter(
+                  filter: ui.ImageFilter.blur(
+                    sigmaX: blurSigma,
+                    sigmaY: blurSigma,
+                  ),
+                  child: const SizedBox.expand(),
+                ),
+                // 统一的“浅黑色”着色，无上下渐变
+                ColoredBox(color: Colors.black.withValues(alpha: tintAlpha)),
+              ],
             ),
           ),
         ),
@@ -544,6 +539,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
+
 
 /// 内部组件：先生成“被蒙版的内容”（模糊+着色），
 /// 再用与上面相同逻辑计算的动态 stops 生成真正的 Shader。
