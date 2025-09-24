@@ -386,7 +386,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     final totalHeight = mediaTop + height;
 
     // 侧向羽化像素（不再作为构造参数暴露）
-    const double _kSideFeatherPx = 12.0;
+    const double kSideFeatherPx = 12.0;
 
     return AppBar(
       foregroundColor: Colors.white,
@@ -444,7 +444,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
               ShaderMask(
                 shaderCallback: (rect) {
                   final edge =
-                      (_kSideFeatherPx / rect.width).clamp(0.0, 0.25); // 12px -> 比例
+                      (kSideFeatherPx  / rect.width).clamp(0.0, 0.25); // 12px -> 比例
                   return LinearGradient(
                     begin: Alignment.centerLeft,
                     end: Alignment.centerRight,
