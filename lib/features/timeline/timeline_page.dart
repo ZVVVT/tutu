@@ -364,21 +364,23 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
 class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _GlassAppBar({
     required this.title,
-    this.height = 56,        // 工具栏高度（iOS Photos 约 55–56）
-    this.blurSigma = 22,     // 毛玻璃强度：20–24 更像系统
-    this.tintAlpha = 0.12,   // 统一轻度着色：0.10–0.16 越小越通透
-    this.featherHeight = 40, // 底缘羽化高度：34–44 越大越柔
-    this.featherEase = 0.52, // 羽化缓动：0.25–0.60 越大越“软”
+    this.height = 56,        // 工具栏高度
+    this.blurSigma = 22,     // 毛玻璃强度：20–24
+    this.tintAlpha = 0.12,   // 统一轻度着色：0.10–0.16
+    this.featherHeight = 40, // 底缘羽化高度：34–44
+    // 注意：不再接收 featherEase 入参，避免 lint 警告
   });
 
   final String title;
   final double height;
 
-  // 可调参数
+  // 可调参数（通过构造入参）
   final double blurSigma;
   final double tintAlpha;
   final double featherHeight;
-  final double featherEase;
+
+  // 羽化软硬（0.25–0.60 越大越“软”），改这行默认值即可
+  final double featherEase = 0.52;
 
   @override
   Size get preferredSize => Size.fromHeight(height);
@@ -415,24 +417,23 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
             shaderCallback: (rect) {
               final double h   = rect.height;
               final double f   = featherHeight.clamp(8, h);
-              final double beg = (h - f) / h;                   // 羽化起点(0~1，从顶部算)
-              final double mid = beg + (featherEase * f / h);   // 过渡中段，决定软硬
+              final double beg = (h - f) / h;                    // 羽化起点(0~1)
+              final double mid = beg + (featherEase * f / h);    // 中段（更柔）
 
-              // 三段：1. 完全保留  2. 半保留  3. 透明
-              return LinearGradient(
+              return const LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: const [
-                  Color(0xFFFFFFFF),                 // 完整保留上方的模糊+着色
-                  Color(0xB3FFFFFF),                 // 70% 保留，过渡更顺滑
-                  Color(0x00FFFFFF),                 // 完全透明（无模糊、无着色）
+                colors: [
+                  Color(0xFFFFFFFF),   // 完整保留上方模糊+着色
+                  Color(0xB3FFFFFF),   // 70% 保留，过渡更顺滑
+                  Color(0x00FFFFFF),   // 完全透明（无模糊、无着色）
                 ],
+              ).copyWith(
                 stops: [
                   beg.clamp(0.0, 1.0).toDouble(),
                   mid.clamp(0.0, 1.0).toDouble(),
                   1.0,
                 ],
-                tileMode: TileMode.clamp,
               ).createShader(rect);
             },
 
@@ -447,7 +448,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
                   ),
                   child: const SizedBox.expand(),
                 ),
-                // 若你的 Flutter 版本不支持 withValues，就换成 withOpacity(tintAlpha)
+                // 如果你的 Flutter 版本不支持 withValues，换成 withOpacity(tintAlpha)
                 ColoredBox(color: Colors.black.withValues(alpha: tintAlpha)),
               ],
             ),
@@ -457,6 +458,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
+
 
 
 /// 查看页：先中清(1024) → 再原图淡入
