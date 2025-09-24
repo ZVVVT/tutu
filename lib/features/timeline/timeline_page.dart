@@ -171,14 +171,26 @@ class _TimelinePageState extends State<TimelinePage> {
   Widget build(BuildContext context) {
     if (_loading) {
       return Scaffold(
-        appBar: const _GlassAppBar(title: '时间线', height: 55),
+        appBar: const _GlassAppBar(
+          title: '时间线',
+          height: 55,
+          blurSigma: 18,
+          tintAlphaTop: 0.60,
+          featherHeight: 24,
+        ),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_denyReason != null) {
       return Scaffold(
-        appBar: const _GlassAppBar(title: '时间线', height: 55),
+        appBar: const _GlassAppBar(
+          title: '时间线',
+          height: 55,
+          blurSigma: 18,
+          tintAlphaTop: 0.60,
+          featherHeight: 24,
+        ),
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -196,8 +208,14 @@ class _TimelinePageState extends State<TimelinePage> {
     }
 
     return Scaffold(
-      extendBodyBehindAppBar: true,                         // 内容延伸到 AppBar 背后
-      appBar: const _GlassAppBar(title: '时间线', height: 55), // 始终相同的渐变 & 毛玻璃
+      extendBodyBehindAppBar: true, // 内容延伸到 AppBar 背后
+      appBar: const _GlassAppBar(
+        title: '时间线',
+        height: 55,
+        blurSigma: 18,
+        tintAlphaTop: 0.60,
+        featherHeight: 24,
+      ),
       body: Directionality(
         textDirection: TextDirection.rtl, // 行内右→左
         child: NotificationListener<ScrollNotification>(
@@ -210,7 +228,7 @@ class _TimelinePageState extends State<TimelinePage> {
           },
           child: CustomScrollView(
             controller: _scroll,
-            reverse: true,         // 自底向上
+            reverse: true, // 自底向上
             cacheExtent: 1200,
             slivers: [
               // 1) 照片网格（reverse=true：视觉上“靠下”）
@@ -341,84 +359,14 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
   }
 }
 
-/// 毛玻璃 + 黑→透明 渐变（底部 100% 透明；不随滚动变化）
-// class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
-//   const _GlassAppBar({
-//     required this.title,
-//     this.height = 55,
-//   });
-
-//   final String title;
-//   final double height;
-
-//   // 调节点：
-//   static const double _kTopAlpha = 0.90; // 顶部黑色强度（0~1）
-
-//   @override
-//   Size get preferredSize => Size.fromHeight(height);
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return AppBar(
-//       foregroundColor: Colors.white,
-//       iconTheme: const IconThemeData(color: Colors.white),
-//       titleTextStyle:
-//           Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
-//       title: Text(title),
-//       centerTitle: true,
-//       toolbarHeight: height,
-//       elevation: 0,
-//       backgroundColor: Colors.transparent,
-//       surfaceTintColor: Colors.transparent,
-//       // 如需白色状态栏图标，取消下一行注释并确保顶部 import 了 services.dart
-//       // systemOverlayStyle: SystemUiOverlayStyle.light,
-//       flexibleSpace: ClipRect(
-//         child: Stack(
-//           fit: StackFit.expand,
-//           children: [
-//             // 1) 毛玻璃：底部裁成 0，确保“完全透明 & 不模糊”
-//             ShaderMask(
-//               shaderCallback: (rect) => const LinearGradient(
-//                 begin: Alignment.topCenter,
-//                 end: Alignment.bottomCenter,
-//                 colors: [Colors.white, Colors.transparent],
-//                 stops: [0.0, 1.0],
-//               ).createShader(rect),
-//               blendMode: BlendMode.dstIn,
-//               child: BackdropFilter(
-//                 filter: ui.ImageFilter.blur(sigmaX: 36, sigmaY: 36),
-//                 child: const SizedBox.expand(),
-//               ),
-//             ),
-//             // 2) 颜色覆盖：顶部黑色 → 底部完全透明（withValues 避免弃用告警）
-//             DecoratedBox(
-//               decoration: BoxDecoration(
-//                 gradient: LinearGradient(
-//                   begin: Alignment.topCenter,
-//                   end: Alignment.bottomCenter,
-//                   colors: [
-//                     Colors.black.withValues(alpha: _kTopAlpha),
-//                     Colors.black.withValues(alpha: 0.0),
-//                   ],
-//                   stops: const [0.0, 1.0],
-//                 ),
-//               ),
-//             ),
-//           ],
-//         ),
-//       ),
-//     );
-//   }
-// }
-
-//毛玻璃层（大面积）+羽化透明带（仅底缘一小段）+深色着色（tint）
+// 毛玻璃层（大面积）+羽化透明带（仅底缘一小段）+深色着色（tint）
 class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _GlassAppBar({
     required this.title,
     this.height = 44,
-    this.blurSigma = 18,           // 毛玻璃强度（8–24 比较像）
-    this.tintAlphaTop = 0.60,      // 顶部黑色着色强度（0.5–0.7）
-    this.featherHeight = 24,       // 底部羽化高度（16–28）
+    this.blurSigma = 18,      // 毛玻璃强度（8–24 比较像）
+    this.tintAlphaTop = 0.60, // 顶部黑色着色强度（0.5–0.7）
+    this.featherHeight = 24,  // 底部羽化高度（16–28）
   });
 
   final String title;
@@ -465,7 +413,6 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
               ),
 
               // 2) 用 ShaderMask 把“毛玻璃”底部裁成透明（羽化带）
-              //   效果：上方 100% 模糊；越靠近底部越少模糊，最底完全无模糊
               Align(
                 alignment: Alignment.bottomCenter,
                 child: IgnorePointer(
@@ -475,12 +422,14 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: const [Colors.black, Colors.transparent],
-                        stops: [
-                          0.0,
-                          1.0,
-                        ],
+                        stops: const [0.0, 1.0],
                       ).createShader(
-                        Rect.fromLTWH(0, rect.height - featherHeight, rect.width, featherHeight),
+                        Rect.fromLTWH(
+                          0,
+                          rect.height - featherHeight,
+                          rect.width,
+                          featherHeight,
+                        ),
                       );
                     },
                     blendMode: BlendMode.dstOut, // 把底部“挖”成渐隐
@@ -510,11 +459,6 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
-
-
-
-
-
 
 /// 查看页：先中清(1024) → 再原图淡入
 class _Viewer extends StatelessWidget {
