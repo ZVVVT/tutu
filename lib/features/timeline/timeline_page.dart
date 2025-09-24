@@ -369,9 +369,9 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _GlassAppBar({
     required this.title,
     this.height = 56,        // 工具栏高度
-    this.blurSigma = 22,     // 毛玻璃强度：18–24（越大越“黑”）
-    this.tintAlpha = 0.94,   // 乘性暗化不透明度：0.20–0.35 越大越“黑”
-    this.featherHeight = 32, // 底缘羽化高度：24–40（越大过渡越长）
+    this.blurSigma = 22,     // 模糊强度：20–26 更深
+    this.tintAlpha = 0.28,   // 乘性暗化不透明度：0.24–0.35 更黑
+    this.featherHeight = 32, // 底缘羽化高度：24–40
   });
 
   final String title;
@@ -412,12 +412,13 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
         height: totalHeight,
         child: ClipRect(
           child: ShaderMask(
-            blendMode: BlendMode.dstIn, // 白=保留（模糊+暗化）；透明=挖掉
+            // 用遮罩把底缘 featherHeight 区域羽化成 0（无模糊无着色）
+            blendMode: BlendMode.dstIn,
             shaderCallback: (rect) {
               final double h   = rect.height;
               final double f   = featherHeight.clamp(8.0, h);
-              final double beg = ((h - f) / h).clamp(0.0, 1.0);                // 羽化起点
-              final double mid = (beg + (_featherEase * f / h)).clamp(beg, 0.9999); // 过渡中段
+              final double beg = ((h - f) / h).clamp(0.0, 1.0);                 // 羽化起点
+              final double mid = (beg + (_featherEase * f / h)).clamp(beg, 0.9999);
 
               return LinearGradient(
                 begin: Alignment.topCenter,
@@ -430,9 +431,23 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
                 stops: <double>[beg, mid, 1.0],
               ).createShader(rect);
             },
-            child: _MultiplyTintLayer(
-              blurSigma: blurSigma,
-              multiplyOpacity: tintAlpha, // 乘性暗化强度
+
+            // ⚠️ 关键：ColorFiltered( multiply ) 必须包住 BackdropFilter，
+            // 这样“乘性暗化”才会作用到“模糊后的内容”，不会出现透明或不够黑。
+            child: ColorFiltered(
+              colorFilter: ColorFilter.mode(
+                // 若你本机 Flutter 版本不支持 withValues，可改成 withOpacity(tintAlpha)
+                Colors.black.withValues(alpha: tintAlpha.clamp(0.0, 1.0)),
+                BlendMode.multiply,
+              ),
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(
+                  sigmaX: blurSigma,
+                  sigmaY: blurSigma,
+                ),
+                // 这里用一个透明盒子即可，让 BackdropFilter 定义影响区域
+                child: const SizedBox.expand(),
+              ),
             ),
           ),
         ),
@@ -440,6 +455,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
+
 
 /// 乘性暗化层：BackdropFilter(模糊) + ColorFiltered(multiply)
 class _MultiplyTintLayer extends StatelessWidget {
