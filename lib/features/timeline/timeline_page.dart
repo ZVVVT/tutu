@@ -381,7 +381,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   final double featherHeight;
 
   // —— 内部常量（不再作为可选参数暴露，从而避免“从未传入”的 analyzer 警告）——
-  static const double _overlayAlpha = 0.12; // 顶层统一纯黑遮罩（0.10–0.20）
+  static const double _overlayAlpha = 0.50; // 顶层统一纯黑遮罩（0.10–0.20）
   static const double _dimFactor    = 0.88; // 亮度压缩（0.80–0.92 越小越黑）
   static const double _featherEase  = 0.34; // 羽化软硬（越大越“软”）
 
@@ -427,22 +427,22 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
               final f   = featherHeight.clamp(8.0, h);
               final beg = ((h - f) / h).clamp(0.0, 1.0);
               final mid = (beg + (_featherEase * f / h)).clamp(beg, 0.9999);
+              // return LinearGradient(
+              //   begin: Alignment.topCenter,
+              //   end: Alignment.bottomCenter,
+              //   colors: const [Colors.white, Colors.white, Colors.transparent],
+              //   stops: <double>[beg, mid, 1.0],
+              // ).createShader(rect);
               return LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: const [Colors.white, Colors.white, Colors.transparent],
-                stops: <double>[beg, mid, 1.0],
-              ).createShader(rect);
-            //   return LinearGradient(
-            //   begin: Alignment.topCenter,
-            //   end: Alignment.bottomCenter,
-            //   colors: const [
-            //     Color(0xFFFFFFFF), // 顶部完整保留
-            //     Color(0xE6FFFFFF), // 中段 90% 保留，提前“松”一点
-            //     Color(0x00FFFFFF), // 底部完全透明
-            //   ],
-            //   stops: <double>[beg, (beg + mid) * 0.5, 1.0], // 中间点稍往上推
-            // ).createShader(rect);
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: const [
+                Color(0xFFFFFFFF), // 顶部完整保留
+                Color(0xE6FFFFFF), // 中段 90% 保留，提前“松”一点
+                Color(0x00FFFFFF), // 底部完全透明
+              ],
+              stops: <double>[beg, (beg + mid) * 0.5, 1.0], // 中间点稍往上推
+            ).createShader(rect);
 
             },
             child: ColorFiltered(
