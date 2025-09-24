@@ -365,7 +365,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   final double featherHeight;
 
   // —— 内部常量（不暴露，避免 analyzer 提示）——
-  static const double _overlayAlpha = 0.16; // 顶层纯黑封顶（0.14–0.20）
+  static const double _overlayAlpha = 0.40; // 顶层纯黑封顶（0.14–0.20）
   static const double _dimFactor    = 0.92; // 亮度压缩（0.90–0.94）
   static const double _featherEase  = 0.80; // 羽化软硬（0.7–0.85）
 
