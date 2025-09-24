@@ -370,7 +370,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.title,
     this.height = 56,        // 工具栏高度
     this.blurSigma = 22,     // 模糊强度：20–26 更深
-    this.tintAlpha = 0.28,   // 乘性暗化不透明度：0.24–0.35 更黑
+    this.tintAlpha = 0.88,   // 乘性暗化不透明度：0.24–0.35 更黑
     this.featherHeight = 32, // 底缘羽化高度：24–40
   });
 
@@ -380,8 +380,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   final double tintAlpha;     // 用于 Multiply 的强度
   final double featherHeight;
 
-  // 羽化软硬（0.25–0.55 越大越“软”）
-  static const double _featherEase = 0.45;
+  static const double _featherEase = 0.45; // 羽化软硬
 
   @override
   Size get preferredSize => Size.fromHeight(height);
@@ -399,7 +398,6 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
       title: Text(title),
       centerTitle: true,
       toolbarHeight: height,
-
       elevation: 0,
       scrolledUnderElevation: 0,
       shadowColor: Colors.transparent,
@@ -407,7 +405,6 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
       backgroundColor: Colors.transparent,
       // 如需白色状态栏图标：systemOverlayStyle: SystemUiOverlayStyle.light,
 
-      // 整块毛玻璃 + 乘性暗化；底缘羽化到完全透明
       flexibleSpace: SizedBox(
         height: totalHeight,
         child: ClipRect(
@@ -417,7 +414,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
             shaderCallback: (rect) {
               final double h   = rect.height;
               final double f   = featherHeight.clamp(8.0, h);
-              final double beg = ((h - f) / h).clamp(0.0, 1.0);                 // 羽化起点
+              final double beg = ((h - f) / h).clamp(0.0, 1.0);
               final double mid = (beg + (_featherEase * f / h)).clamp(beg, 0.9999);
 
               return LinearGradient(
@@ -432,11 +429,10 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
               ).createShader(rect);
             },
 
-            // ⚠️ 关键：ColorFiltered( multiply ) 必须包住 BackdropFilter，
-            // 这样“乘性暗化”才会作用到“模糊后的内容”，不会出现透明或不够黑。
+            // ⚠️ 关键：ColorFiltered(multiply) 必须包住 BackdropFilter
             child: ColorFiltered(
               colorFilter: ColorFilter.mode(
-                // 若你本机 Flutter 版本不支持 withValues，可改成 withOpacity(tintAlpha)
+                // 旧版 Flutter 没有 withValues 就改为 withOpacity(tintAlpha)
                 Colors.black.withValues(alpha: tintAlpha.clamp(0.0, 1.0)),
                 BlendMode.multiply,
               ),
@@ -445,7 +441,6 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
                   sigmaX: blurSigma,
                   sigmaY: blurSigma,
                 ),
-                // 这里用一个透明盒子即可，让 BackdropFilter 定义影响区域
                 child: const SizedBox.expand(),
               ),
             ),
@@ -455,6 +450,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
+
 
 
 /// 乘性暗化层：BackdropFilter(模糊) + ColorFiltered(multiply)
