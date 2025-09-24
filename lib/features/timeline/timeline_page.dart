@@ -364,22 +364,23 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
 
 
 
+
 class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _GlassAppBar({
     required this.title,
     this.height = 56,        // 工具栏高度
     this.blurSigma = 22,     // 毛玻璃强度：18–24（越大越“黑”）
-    this.tintAlpha = 0.24,   // ✅ 乘性暗化强度（0.20–0.35 越大越“黑”）
+    this.tintAlpha = 0.24,   // 乘性暗化不透明度：0.20–0.35 越大越“黑”
     this.featherHeight = 32, // 底缘羽化高度：24–40（越大过渡越长）
   });
 
   final String title;
   final double height;
   final double blurSigma;
-  final double tintAlpha;     // 注意：现在用于 Multiply，而不是透明黑覆盖
+  final double tintAlpha;     // 用于 Multiply 的强度
   final double featherHeight;
 
-  // 羽化软硬（0.25–0.55 越大越“软”），内部常量避免 CI 警告
+  // 羽化软硬（0.25–0.55 越大越“软”）
   static const double _featherEase = 0.45;
 
   @override
@@ -399,7 +400,6 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
       centerTitle: true,
       toolbarHeight: height,
 
-      // 去掉所有阴影/滚动暗化
       elevation: 0,
       scrolledUnderElevation: 0,
       shadowColor: Colors.transparent,
@@ -407,8 +407,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
       backgroundColor: Colors.transparent,
       // 如需白色状态栏图标：systemOverlayStyle: SystemUiOverlayStyle.light,
 
-      // 思路：整块毛玻璃 → 乘性暗化（更抗高亮顶穿）；
-      // 用 ShaderMask 把底缘 featherHeight 区域羽化为全透明（无模糊无着色）
+      // 整块毛玻璃 + 乘性暗化；底缘羽化到完全透明
       flexibleSpace: SizedBox(
         height: totalHeight,
         child: ClipRect(
@@ -418,31 +417,22 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
               final double h   = rect.height;
               final double f   = featherHeight.clamp(8.0, h);
               final double beg = ((h - f) / h).clamp(0.0, 1.0);                // 羽化起点
-              final double mid = (beg + (_featherEase * f / h)).clamp(beg, 1); // 更柔一点
+              final double mid = (beg + (_featherEase * f / h)).clamp(beg, 0.9999); // 过渡中段
 
-              return const LinearGradient(
+              return LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [
+                colors: const [
                   Colors.white,      // 上方完整保留（有模糊+暗化）
                   Colors.white,      // 中段继续保留，平顺过渡
                   Colors.transparent // 底部完全透明（无模糊+无着色）
                 ],
-              ).createShader(
-                Rect.fromLTWH(0, 0, rect.width, rect.height),
-              ).transform(
-                // 用 stops 的方式写在 transform 等价于设置 stops（避免旧版 SDK 没有 copyWith）
-                Float64List.fromList(<double>[
-                  1, 0, 0, 0,
-                  0, 1, 0, 0,
-                  0, 0, 1, 0,
-                  0, 0, 0, 1,
-                ]),
-              );
+                stops: <double>[beg, mid, 1.0],
+              ).createShader(rect);
             },
             child: _MultiplyTintLayer(
               blurSigma: blurSigma,
-              multiplyOpacity: tintAlpha, // 用你传入的 tintAlpha 当乘性暗化强度
+              multiplyOpacity: tintAlpha, // 乘性暗化强度
             ),
           ),
         ),
@@ -451,8 +441,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 }
 
-/// 乘性暗化层：BackdropFilter(模糊) + ColorFiltered(multiply)。
-/// multiply 比透明黑覆盖更“抗亮”，更接近系统照片的材质感。
+/// 乘性暗化层：BackdropFilter(模糊) + ColorFiltered(multiply)
 class _MultiplyTintLayer extends StatelessWidget {
   const _MultiplyTintLayer({
     required this.blurSigma,
@@ -460,7 +449,7 @@ class _MultiplyTintLayer extends StatelessWidget {
   });
 
   final double blurSigma;
-  final double multiplyOpacity; // 0.20~0.35 建议范围
+  final double multiplyOpacity; // 建议 0.20–0.35
 
   @override
   Widget build(BuildContext context) {
@@ -474,10 +463,11 @@ class _MultiplyTintLayer extends StatelessWidget {
           ),
           child: const SizedBox.expand(),
         ),
-        // ✅ 关键：乘性暗化（比透明黑更“黑”更稳，不易被高亮顶穿）
+        // 乘性暗化：比半透明黑覆盖更抗高亮
         ColorFiltered(
           colorFilter: ColorFilter.mode(
-            Colors.black.withOpacity(multiplyOpacity.clamp(0.0, 1.0)),
+            // 用 withValues 去掉弃用提示；如果你本地 SDK 过旧再换回 withOpacity
+            Colors.black.withValues(alpha: multiplyOpacity.clamp(0.0, 1.0)),
             BlendMode.multiply,
           ),
           child: const SizedBox.expand(),
