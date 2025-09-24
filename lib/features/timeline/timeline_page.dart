@@ -363,46 +363,47 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
 class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _GlassAppBar({
     required this.title,
-    this.height = 56,
-    this.blurSigma = 22,        // 毛玻璃强度：16–22
-    this.tintAlphaTop = 0.58,   // 顶部黑色强度：0.48–0.62
-    this.featherHeight = 38,    // 底缘羽化高度：28–42
-    //this.featherEase = 0.38,    // 羽化缓动比例：0.25–0.55（越大越“软”）删掉 featherEase 这个可选参数，避免 lint
+    this.height = 56,     // 工具栏高度（建议 55~56）
+    this.blurSigma = 22,  // 毛玻璃强度（16~22）
+    this.tintAlphaTop = 0.14, // 轻着色强度（0.12~0.18，越大越暗）
+    this.featherHeight = 32,  // 底缘羽化高度（24~36）
   });
 
   final String title;
   final double height;
 
+  // 可调参数（内部使用，不会触发“未传入”告警）
   final double blurSigma;
   final double tintAlphaTop;
   final double featherHeight;
 
-  // ✅ 改为内部字段（需要更软就改下面这个默认值）
-  final double featherEase = 0.45; // 0.25–0.55，越大越“软”
+  // 羽化缓动：0.25~0.55 越大越“软”
+  final double featherEase = 0.45;
 
   @override
   Size get preferredSize => Size.fromHeight(height);
 
   @override
   Widget build(BuildContext context) {
-    final mediaTop = MediaQuery.paddingOf(context).top;
-    final totalHeight = mediaTop + height;
+    final double mediaTop = MediaQuery.paddingOf(context).top; // 状态栏
+    final double totalHeight = mediaTop + height;
 
     return AppBar(
       foregroundColor: Colors.white,
       iconTheme: const IconThemeData(color: Colors.white),
-      titleTextStyle: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
+      titleTextStyle:
+          Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
       title: Text(title),
       centerTitle: true,
       toolbarHeight: height,
 
-      // 去除一切阴影/分割线
+      // 去除一切阴影/分割线/滚动着色
       elevation: 0,
       scrolledUnderElevation: 0,
       shadowColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
       backgroundColor: Colors.transparent,
-      // systemOverlayStyle: SystemUiOverlayStyle.light,
+      // systemOverlayStyle: SystemUiOverlayStyle.light, // 若需白色状态栏图标可开启
 
       flexibleSpace: SizedBox(
         height: totalHeight,
@@ -410,42 +411,46 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // 1) 整块毛玻璃
+              // 1) 整块毛玻璃（覆盖 状态栏 + 工具栏）
               BackdropFilter(
                 filter: ui.ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
                 child: const SizedBox.expand(),
               ),
 
-              // 2) 羽化遮罩（dstIn）：三段渐变 + 缓动，底部更柔和
+              // 2) 底缘羽化：把“整块材质”平滑推到 0，避免硬边
               ShaderMask(
                 blendMode: BlendMode.dstIn,
-                shaderCallback: (rect) {
-                  final h = rect.height;
-                  final f = featherHeight.clamp(8, h);          // 羽化厚度像素
-                  final start = (h - f) / h;                    // 羽化起点(0~1，从顶部算)
-                  final eased = featherEase.clamp(0.15, 0.70);  // 缓动比例
-                  final mid   = start + (eased * f / h);        // 过渡中段
-                  // 三段：白(保留模糊) -> 半白(半保留) -> 透明(完全无模糊)
-                  return LinearGradient(
+                shaderCallback: (Rect rect) {
+                  final double h = rect.height;
+                  final double f = featherHeight.clamp(8.0, h);     // 羽化厚度px
+                  final double start = (h - f) / h;                 // 起点(0~1)
+                  final double eased = featherEase.clamp(0.15, 0.70);
+                  final double mid = start + (eased * f / h);       // 过渡中段
+
+                  return const LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Colors.white,
-                      Colors.white.withValues(alpha: 0.45),
-                      Colors.transparent,
+                      Colors.white,                      // 保留上方材质
+                      Color.fromARGB(115, 255, 255, 255), // 半保留，缓和过渡
+                      Colors.transparent,                // 底部完全透明
                     ],
-                    stops: [
-                      start.clamp(0.0, 1.0),
-                      mid.clamp(0.0, 1.0),
-                      1.0,
-                    ],
-                    tileMode: TileMode.clamp,
-                  ).createShader(rect);
+                  ).createShader(Rect.fromLTWH(
+                    0,
+                    0,
+                    rect.width,
+                    rect.height,
+                  ))
+                  // 为了做非线性过渡，我们用 stops 控制三段位置
+                  ;
                 },
-                child: const SizedBox.expand(),
+                child: _FeatherStopsLayer(
+                  featherHeight: featherHeight,
+                  featherEase: featherEase,
+                ),
               ),
 
-              // 3) 顶部黑色着色（上深下透）
+              // 3) 轻量常数着色（上方略暗 → 底部羽化为 0）
               DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -456,23 +461,22 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
                       Colors.black.withValues(alpha: 0.0),
                     ],
                     stops: const [0.0, 1.0],
-                    tileMode: TileMode.clamp,
                   ),
                 ),
               ),
 
-              // 4) 极轻的“接缝柔化”条（可避免个别底色对比造成的错觉性硬边）
+              // 4) 细微接缝柔化（极轻 6~10px）
               Align(
                 alignment: Alignment.bottomCenter,
                 child: IgnorePointer(
                   child: Container(
-                    height: 8, // 6–10 更自然
+                    height: 8,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          Colors.black.withValues(alpha: 0.04),
+                          Colors.black.withValues(alpha: 0.03),
                           Colors.black.withValues(alpha: 0.0),
                         ],
                       ),
@@ -487,6 +491,50 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
+
+/// 把三段式羽化的“非线性 stops”计算抽出来，避免在 ShaderMask 中出现复杂/重复逻辑。
+class _FeatherStopsLayer extends StatelessWidget {
+  const _FeatherStopsLayer({
+    required this.featherHeight,
+    required this.featherEase,
+  });
+
+  final double featherHeight;
+  final double featherEase;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        final double h = c.biggest.height;
+        final double f = featherHeight.clamp(8.0, h);
+        final double start = (h - f) / h;
+        final double eased = featherEase.clamp(0.15, 0.70);
+        final double mid = start + (eased * f / h);
+
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: const [
+                Colors.white,
+                Color.fromARGB(115, 255, 255, 255),
+                Colors.transparent,
+              ],
+              stops: [
+                start.clamp(0.0, 1.0) as double,
+                mid.clamp(0.0, 1.0) as double,
+                1.0,
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 
 
 
