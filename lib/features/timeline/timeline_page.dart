@@ -342,23 +342,101 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
 }
 
 /// 毛玻璃 + 黑→透明 渐变（底部 100% 透明；不随滚动变化）
+// class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
+//   const _GlassAppBar({
+//     required this.title,
+//     this.height = 55,
+//   });
+
+//   final String title;
+//   final double height;
+
+//   // 调节点：
+//   static const double _kTopAlpha = 0.90; // 顶部黑色强度（0~1）
+
+//   @override
+//   Size get preferredSize => Size.fromHeight(height);
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return AppBar(
+//       foregroundColor: Colors.white,
+//       iconTheme: const IconThemeData(color: Colors.white),
+//       titleTextStyle:
+//           Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
+//       title: Text(title),
+//       centerTitle: true,
+//       toolbarHeight: height,
+//       elevation: 0,
+//       backgroundColor: Colors.transparent,
+//       surfaceTintColor: Colors.transparent,
+//       // 如需白色状态栏图标，取消下一行注释并确保顶部 import 了 services.dart
+//       // systemOverlayStyle: SystemUiOverlayStyle.light,
+//       flexibleSpace: ClipRect(
+//         child: Stack(
+//           fit: StackFit.expand,
+//           children: [
+//             // 1) 毛玻璃：底部裁成 0，确保“完全透明 & 不模糊”
+//             ShaderMask(
+//               shaderCallback: (rect) => const LinearGradient(
+//                 begin: Alignment.topCenter,
+//                 end: Alignment.bottomCenter,
+//                 colors: [Colors.white, Colors.transparent],
+//                 stops: [0.0, 1.0],
+//               ).createShader(rect),
+//               blendMode: BlendMode.dstIn,
+//               child: BackdropFilter(
+//                 filter: ui.ImageFilter.blur(sigmaX: 36, sigmaY: 36),
+//                 child: const SizedBox.expand(),
+//               ),
+//             ),
+//             // 2) 颜色覆盖：顶部黑色 → 底部完全透明（withValues 避免弃用告警）
+//             DecoratedBox(
+//               decoration: BoxDecoration(
+//                 gradient: LinearGradient(
+//                   begin: Alignment.topCenter,
+//                   end: Alignment.bottomCenter,
+//                   colors: [
+//                     Colors.black.withValues(alpha: _kTopAlpha),
+//                     Colors.black.withValues(alpha: 0.0),
+//                   ],
+//                   stops: const [0.0, 1.0],
+//                 ),
+//               ),
+//             ),
+//           ],
+//         ),
+//       ),
+//     );
+//   }
+// }
+
+//毛玻璃层（大面积）+羽化透明带（仅底缘一小段）+深色着色（tint）
 class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _GlassAppBar({
     required this.title,
-    this.height = 55,
+    this.height = 44,
+    this.blurSigma = 18,           // 毛玻璃强度（8–24 比较像）
+    this.tintAlphaTop = 0.60,      // 顶部黑色着色强度（0.5–0.7）
+    this.featherHeight = 24,       // 底部羽化高度（16–28）
   });
 
   final String title;
   final double height;
 
-  // 调节点：
-  static const double _kTopAlpha = 0.90; // 顶部黑色强度（0~1）
+  // 🔧 可调参数
+  final double blurSigma;
+  final double tintAlphaTop;
+  final double featherHeight;
 
   @override
   Size get preferredSize => Size.fromHeight(height);
 
   @override
   Widget build(BuildContext context) {
+    final mediaTop = MediaQuery.paddingOf(context).top; // 状态栏高度
+    final totalHeight = mediaTop + height;
+
     return AppBar(
       foregroundColor: Colors.white,
       iconTheme: const IconThemeData(color: Colors.white),
@@ -370,46 +448,73 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
       elevation: 0,
       backgroundColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
-      // 如需白色状态栏图标，取消下一行注释并确保顶部 import 了 services.dart
+      // 如需白色状态栏图标，取消下一行注释 + import services.dart
       // systemOverlayStyle: SystemUiOverlayStyle.light,
-      flexibleSpace: ClipRect(
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // 1) 毛玻璃：底部裁成 0，确保“完全透明 & 不模糊”
-            ShaderMask(
-              shaderCallback: (rect) => const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Colors.white, Colors.transparent],
-                stops: [0.0, 1.0],
-              ).createShader(rect),
-              blendMode: BlendMode.dstIn,
-              child: BackdropFilter(
-                filter: ui.ImageFilter.blur(sigmaX: 36, sigmaY: 36),
+
+      // 关键：让毛玻璃覆盖“状态栏+工具栏”整体，并只在底缘羽化到透明
+      flexibleSpace: SizedBox(
+        height: totalHeight,
+        child: ClipRect(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // 1) 毛玻璃层（整块模糊）
+              BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
                 child: const SizedBox.expand(),
               ),
-            ),
-            // 2) 颜色覆盖：顶部黑色 → 底部完全透明（withValues 避免弃用告警）
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: _kTopAlpha),
-                    Colors.black.withValues(alpha: 0.0),
-                  ],
-                  stops: const [0.0, 1.0],
+
+              // 2) 用 ShaderMask 把“毛玻璃”底部裁成透明（羽化带）
+              //   效果：上方 100% 模糊；越靠近底部越少模糊，最底完全无模糊
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: IgnorePointer(
+                  child: ShaderMask(
+                    shaderCallback: (rect) {
+                      return LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: const [Colors.black, Colors.transparent],
+                        stops: [
+                          0.0,
+                          1.0,
+                        ],
+                      ).createShader(
+                        Rect.fromLTWH(0, rect.height - featherHeight, rect.width, featherHeight),
+                      );
+                    },
+                    blendMode: BlendMode.dstOut, // 把底部“挖”成渐隐
+                    child: Container(height: featherHeight, color: Colors.black),
+                  ),
                 ),
               ),
-            ),
-          ],
+
+              // 3) 黑色着色（上深下透），增强可读性；不影响底部“完全透明”的目标
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: tintAlphaTop), // 顶部更深
+                      Colors.black.withValues(alpha: 0.0),          // 底部全透
+                    ],
+                    stops: const [0.0, 1.0],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
+
+
+
+
+
 
 /// 查看页：先中清(1024) → 再原图淡入
 class _Viewer extends StatelessWidget {
