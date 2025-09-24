@@ -382,28 +382,25 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mediaTop = MediaQuery.paddingOf(context).top; // 状态栏高度
+    final mediaTop = MediaQuery.paddingOf(context).top;
     final totalHeight = mediaTop + height;
-
-    // 侧向羽化像素（不再作为构造参数暴露）
-    const double kSideFeatherPx = 12.0;
 
     return AppBar(
       foregroundColor: Colors.white,
       iconTheme: const IconThemeData(color: Colors.white),
-      titleTextStyle:
-          Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
+      titleTextStyle: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
       title: Text(title),
       centerTitle: true,
       toolbarHeight: height,
-      elevation: 0,
-      backgroundColor: Colors.transparent,
-      surfaceTintColor: Colors.transparent,
-      shadowColor: Colors.transparent,
-      scrolledUnderElevation: 0, // 关闭滚动暗影，避免“黑边”
 
-      // 如需白色状态栏图标，解开下一行并在文件顶部 import services.dart
-      // systemOverlayStyle: SystemUiOverlayStyle.light,
+      // ↓↓↓ 关键：去掉所有阴影/分割线/滚动下的着色
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      shadowColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      backgroundColor: Colors.transparent,
+
+      // systemOverlayStyle: SystemUiOverlayStyle.light, // 需要白色状态栏图标再开
 
       flexibleSpace: SizedBox(
         height: totalHeight,
@@ -411,62 +408,42 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // 1) 毛玻璃（整块）
+              // 1) 整块毛玻璃
               BackdropFilter(
                 filter: ui.ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
                 child: const SizedBox.expand(),
               ),
 
-              // 2) 底缘羽化：把毛玻璃在底部挖成渐隐，确保“完全透明、无模糊”
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: IgnorePointer(
-                  child: ShaderMask(
-                    shaderCallback: (rect) {
-                      return const LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Colors.black, Colors.transparent],
-                        stops: [0.0, 1.0],
-                      ).createShader(
-                        Rect.fromLTWH(
-                          0, rect.height - featherHeight, rect.width, featherHeight,
-                        ),
-                      );
-                    },
-                    blendMode: BlendMode.dstOut,
-                    child: Container(height: featherHeight, color: Colors.black),
-                  ),
-                ),
-              ),
-
-              // 3) 深色着色（上深下透）+ 左右侧向羽化
+              // 2) 用 dstIn + 白色遮罩 把“底部 featherHeight 的区域”羽化到完全透明
               ShaderMask(
+                blendMode: BlendMode.dstIn,
                 shaderCallback: (rect) {
-                  final edge =
-                      (kSideFeatherPx  / rect.width).clamp(0.0, 0.25); // 12px -> 比例
+                  final h = rect.height;
+                  final cutStart = (h - featherHeight) / h; // 从这行开始羽化到 0
                   return LinearGradient(
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
                     colors: const [
-                      Colors.transparent, Colors.white, Colors.white, Colors.transparent
+                      Colors.white,      // 保留上方模糊
+                      Colors.transparent // 底部完全透明（无模糊）
                     ],
-                    stops: [0.0, edge, 1 - edge, 1.0],
+                    stops: [cutStart.clamp(0.0, 1.0), 1.0],
                   ).createShader(rect);
                 },
-                blendMode: BlendMode.dstIn,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      // 让透明更早结束，避免底缘叠加过深
-                      stops: const [0.0, 0.85],
-                      colors: [
-                        Colors.black.withValues(alpha: tintAlphaTop),
-                        Colors.black.withValues(alpha: 0.0),
-                      ],
-                    ),
+                child: const SizedBox.expand(),
+              ),
+
+              // 3) 顶部黑色着色（上深下透），不影响底部 100% 透明
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: tintAlphaTop),
+                      Colors.black.withValues(alpha: 0.0),
+                    ],
+                    stops: const [0.0, 1.0],
                   ),
                 ),
               ),
