@@ -365,21 +365,24 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
 
 
 
-// ==== 仅替换/保留这一份 _GlassAppBar，删除文件里所有其他版本与 _MultiplyTintLayer ====
 class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _GlassAppBar({
     required this.title,
     this.height = 56,        // 工具栏高度
-    this.blurSigma = 80,     // 模糊强度：20–26 更深
-    this.tintAlpha = 0.80,   // 乘性暗化不透明度：0.24–0.35 更黑
-    this.featherHeight = 40, // 底缘羽化高度：24–40
+    this.blurSigma = 24,     // 建议 22–26；更高没必要
+    this.tintAlpha = 0.30,   // 乘性暗化强度：0.24–0.35 越大越黑
+    this.featherHeight = 32, // 底缘羽化高度：24–36
+    this.overlayAlpha = 0.14, // 纯黑封顶遮罩：0.10–0.20
+    this.dimFactor = 0.88,   // 亮度压缩：0.80–0.92 越小越黑
   });
 
   final String title;
   final double height;
   final double blurSigma;
-  final double tintAlpha;     // 用于 Multiply 的强度
+  final double tintAlpha;     // Multiply 强度
   final double featherHeight;
+  final double overlayAlpha;  // 额外 srcOver 黑遮罩
+  final double dimFactor;     // 颜色矩阵整体变暗系数
 
   static const double _featherEase = 0.45; // 羽化软硬（越大越“软”）
 
@@ -391,11 +394,18 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     final mediaTop = MediaQuery.paddingOf(context).top;
     final totalHeight = mediaTop + height;
 
+    // 用 dimFactor 生成颜色矩阵（对 RGB 做整体压暗，不改 Alpha）
+    List<double> _dimMatrix(double f) => <double>[
+      f, 0, 0, 0, 0, // R
+      0, f, 0, 0, 0, // G
+      0, 0, f, 0, 0, // B
+      0, 0, 0, 1, 0, // A
+    ];
+
     return AppBar(
       foregroundColor: Colors.white,
       iconTheme: const IconThemeData(color: Colors.white),
-      titleTextStyle:
-          Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
+      titleTextStyle: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
       title: Text(title),
       centerTitle: true,
       toolbarHeight: height,
@@ -410,70 +420,51 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
         height: totalHeight,
         child: ClipRect(
           child: ShaderMask(
-            blendMode: BlendMode.dstIn, // 底缘羽化 -> 透明
+            // 用遮罩把“底缘 featherHeight ”区域羽化成透明（该区域无模糊/无着色）
+            blendMode: BlendMode.dstIn,
             shaderCallback: (rect) {
-              final h = rect.height;
-              final f = featherHeight.clamp(8.0, h);
-              final beg = ((h - f) / h).clamp(0.0, 1.0);
-              final mid = (beg + (_featherEase * f / h)).clamp(beg, 0.9999);
-              return const LinearGradient(
+              final double h   = rect.height;
+              final double f   = featherHeight.clamp(8.0, h);
+              final double beg = ((h - f) / h).clamp(0.0, 1.0);
+              final double mid = (beg + (_featherEase * f / h)).clamp(beg, 0.9999);
+              return LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Colors.white, Colors.white, Colors.transparent],
+                colors: const [Colors.white, Colors.white, Colors.transparent],
+                stops: <double>[beg, mid, 1.0],
               ).createShader(rect);
             },
 
-            // 先把“模糊 + 乘性暗化 + 纯黑遮罩”合成，再整体做一次亮度压缩
+            // 顺序：模糊 -> 乘性暗化 -> 纯黑封顶 -> 整体亮度压缩（ColorFilter.matrix）
             child: ColorFiltered(
-              // 亮度压缩（dimFactor 0.80~0.92 越小越黑）
-              colorFilter: const ColorFilter.matrix(<double>[
-                0.86, 0,    0,    0, 0,   // R
-                0,    0.86, 0,    0, 0,   // G
-                0,    0.86, 0.86, 0, 0,   // B  ← 三个通道都乘以 dimFactor(这里 0.86)
-                0,    0,    0,    1, 0,   // A
-              ]),
+              colorFilter: ColorFilter.matrix(_dimMatrix(dimFactor.clamp(0.0, 1.0))),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
                   // 1) 背景模糊
                   BackdropFilter(
-                    filter: ui.ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+                    filter: ui.ImageFilter.blur(
+                      sigmaX: blurSigma,
+                      sigmaY: blurSigma,
+                    ),
                     child: const SizedBox.expand(),
                   ),
-                  // 2) 乘性暗化（抗高亮，保留材质感）
+
+                  // 2) 乘性暗化（抗高亮）
                   ColorFiltered(
                     colorFilter: ColorFilter.mode(
-                      // 旧版 Flutter 可改 .withOpacity(tintAlpha)
-                      Colors.black.withValues(alpha: tintAlpha),
+                      // 使用 withValues 避免弃用警告；若本地 SDK 不支持可改 withOpacity
+                      Colors.black.withValues(alpha: tintAlpha.clamp(0.0, 1.0)),
                       BlendMode.multiply,
                     ),
                     child: const SizedBox.expand(),
                   ),
-                  // 3) 纯黑遮罩（真正“封顶黑”）；overlayAlpha 0.10~0.22
-                  const ColoredBox(
-                    color: Color.fromRGBO(0, 0, 0, 0.16), // overlayAlpha
+
+                  // 3) 顶部统一的 srcOver 纯黑遮罩（“封顶黑”）
+                  ColoredBox(
+                    color: Colors.black.withValues(alpha: overlayAlpha.clamp(0.0, 1.0)),
                   ),
                 ],
-              ),
-            ),
-          ),
-        ),
-      ),
-
-
-            // 关键：先“乘性暗化”再让 BackdropFilter 定义模糊区域（被上面的 ShaderMask 羽化）
-            child: ColorFiltered(
-              colorFilter: ColorFilter.mode(
-                // 如果你本机不支持 withValues，改为 withOpacity(tintAlpha)
-                Colors.black.withValues(alpha: tintAlpha.clamp(0.0, 1.0)),
-                BlendMode.multiply,
-              ),
-              child: BackdropFilter(
-                filter: ui.ImageFilter.blur(
-                  sigmaX: blurSigma,
-                  sigmaY: blurSigma,
-                ),
-                child: const SizedBox.expand(),
               ),
             ),
           ),
@@ -482,6 +473,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
+
 
 
 
