@@ -56,7 +56,7 @@ class _TimelinePageState extends State<TimelinePage> {
   double _topInteractiveGap(BuildContext context) {
     final topSafe = MediaQuery.of(context).padding.top;
     const double kToolbar = 44; // 与 _GlassAppBar 默认高度保持一致
-    const double kExtra = 8;    // 手指缓冲，避免误触
+    const double kExtra = 0;    // 手指缓冲，避免误触
     return topSafe + kToolbar + kExtra;
   }
 
@@ -352,7 +352,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   final double height;
 
   // 调节点：
-  static const double _kTopAlpha = 0.60; // 顶部黑色强度（0~1）
+  static const double _kTopAlpha = 0.80; // 顶部黑色强度（0~1）
 
   @override
   Size get preferredSize => Size.fromHeight(height);
@@ -386,7 +386,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
               ).createShader(rect),
               blendMode: BlendMode.dstIn,
               child: BackdropFilter(
-                filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
                 child: const SizedBox.expand(),
               ),
             ),
