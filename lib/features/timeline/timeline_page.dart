@@ -370,8 +370,8 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.title,
     this.height = 56,        // 工具栏高度
     this.blurSigma = 24,     // 建议 22–26；更高通常没必要
-    this.tintAlpha = 0.80,   // Multiply 强度：0.24–0.35 越大越黑
-    this.featherHeight = 50, // 底缘羽化高度：24–36
+    this.tintAlpha = 0.30,   // Multiply 强度：0.24–0.35 越大越黑
+    this.featherHeight = 32, // 底缘羽化高度：24–36
   });
 
   final String title;
@@ -381,8 +381,8 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   final double featherHeight;
 
   // —— 内部常量（不再作为可选参数暴露，从而避免“从未传入”的 analyzer 警告）——
-  static const double _overlayAlpha = 0.16; // 顶层统一纯黑遮罩（0.10–0.20）
-  static const double _dimFactor    = 0.86; // 亮度压缩（0.80–0.92 越小越黑）
+  static const double _overlayAlpha = 0.50; // 顶层统一纯黑遮罩（0.10–0.20）
+  static const double _dimFactor    = 0.50; // 亮度压缩（0.80–0.92 越小越黑）
   static const double _featherEase  = 0.45; // 羽化软硬（越大越“软”）
 
   @override
