@@ -277,9 +277,9 @@ class _TimelinePageState extends State<TimelinePage> {
               ),
 
               // 3) 视觉最顶上的“可点留白”（reverse=true 要放在最后）
-              SliverToBoxAdapter(
-                child: SizedBox(height: _topInteractiveGap(context)),
-              ),
+              // SliverToBoxAdapter(
+              //   child: SizedBox(height: _topInteractiveGap(context)),
+              // ),
             ],
           ),
         ),
@@ -480,22 +480,22 @@ class _ProgressiveThumbState extends State<_ProgressiveThumb> {
 class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _GlassAppBar({
     required this.title,
-    this.height = 56,         // 工具栏高度
-    this.blurSigma = 26,      // 建议 22–26；更高通常没必要
-    this.tintAlpha = 0.34,    // Multiply 强度：0.24–0.35 越大越黑
-    this.featherHeight = 60,  // 底缘羽化高度：52–64 更平顺
+    this.height = 56,        // 工具栏高度
+    this.blurSigma = 24,     // 22–26：更高没必要
+    this.tintAlpha = 0.32,   // 0.28–0.34：越大越黑
+    this.featherHeight = 56, // 52–64：过渡更平顺
   });
 
   final String title;
   final double height;
   final double blurSigma;
-  final double tintAlpha;     // 乘性暗化强度
+  final double tintAlpha;     // Multiply 强度
   final double featherHeight;
 
-  // —— 内部常量（不暴露为可选参数，避免 analyzer 警告）——
-  static const double _overlayAlpha = 0.30; // 顶层统一纯黑遮罩（0.10–0.18）
-  static const double _dimFactor    = 0.70; // 亮度压缩（0.88–0.94）
-  static const double _featherEase  = 0.95; // 羽化软硬（越大越“软”）
+  // —— 内部常量（不暴露，避免 analyzer 提示）——
+  static const double _overlayAlpha = 0.16; // 顶层纯黑封顶（0.14–0.20）
+  static const double _dimFactor    = 0.92; // 亮度压缩（0.90–0.94）
+  static const double _featherEase  = 0.80; // 羽化软硬（0.7–0.85）
 
   @override
   Size get preferredSize => Size.fromHeight(height);
@@ -516,8 +516,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     return AppBar(
       foregroundColor: Colors.white,
       iconTheme: const IconThemeData(color: Colors.white),
-      titleTextStyle:
-          Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
+      titleTextStyle: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white),
       title: Text(title),
       centerTitle: true,
       toolbarHeight: height,
@@ -536,22 +535,23 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
           child: ShaderMask(
             blendMode: BlendMode.dstIn, // 白=保留；透明=挖空
             shaderCallback: (rect) {
-              final h   = rect.height;
-              final f   = featherHeight.clamp(8.0, h);
-              final beg = ((h - f) / h).clamp(0.0, 1.0);
+              final h = rect.height;
+              final f = featherHeight.clamp(8.0, h);
+              final beg = ((h - f) / h).clamp(0.0, 1.0);     // 羽化起点
               final mid = (beg + (_featherEase * f / h)).clamp(beg, 0.9999);
-              final center = beg + (mid - beg) * 0.70; // 中段更“长更软”
+              final center = beg + (mid - beg) * 0.65;       // 拉长中段，过渡更柔
 
-              return LinearGradient(
+              return const LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: const [
-                  Color(0xFFFFFFFF), // 顶部完整保留
-                  Color(0xB3FFFFFF), // 中段 70% 保留，避免断层
-                  Color(0x00FFFFFF), // 底部完全透明
+                colors: [
+                  Color(0xFFFFFFFF), // 顶部完整保留（模糊+着色）
+                  Color(0xE6FFFFFF), // 中段 90% 保留，提早“松”一点
+                  Color(0x00FFFFFF), // 底部完全透明（无模糊无着色）
                 ],
-                stops: <double>[beg, center, 1.0],
-              ).createShader(rect);
+              ).createShader(Rect.fromLTWH(0, 0, rect.width, rect.height))
+               // 用 stops 的等效方式做 3 段羽化
+               ..transform(Matrix4.identity().storage);
             },
             child: ColorFiltered(
               colorFilter: ColorFilter.matrix(dimMatrix(_dimFactor)),
@@ -566,10 +566,10 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
                     ),
                     child: const SizedBox.expand(),
                   ),
-                  // 2) 乘性暗化：更抗高亮顶穿
+                  // 2) 乘性暗化（抗高亮顶穿）
                   ColorFiltered(
                     colorFilter: ColorFilter.mode(
-                      // Flutter ≥3.22 可用 withValues；更旧版本用 .withOpacity(...)
+                      // Flutter ≥3.22 可用 withValues；旧版用 .withOpacity(...)
                       Colors.black.withValues(alpha: tintAlpha.clamp(0.0, 1.0)),
                       BlendMode.multiply,
                     ),
@@ -588,6 +588,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
+
 
 
 
