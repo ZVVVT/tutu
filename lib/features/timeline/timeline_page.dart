@@ -364,9 +364,9 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   const _GlassAppBar({
     required this.title,
     this.height = 56,
-    this.blurSigma = 18,        // 毛玻璃强度：16–22
-    this.tintAlphaTop = 0.55,   // 顶部黑色强度：0.48–0.62
-    this.featherHeight = 36,    // 底缘羽化高度：28–42
+    this.blurSigma = 22,        // 毛玻璃强度：16–22
+    this.tintAlphaTop = 0.58,   // 顶部黑色强度：0.48–0.62
+    this.featherHeight = 38,    // 底缘羽化高度：28–42
     //this.featherEase = 0.38,    // 羽化缓动比例：0.25–0.55（越大越“软”）删掉 featherEase 这个可选参数，避免 lint
   });
 
@@ -378,7 +378,7 @@ class _GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   final double featherHeight;
 
   // ✅ 改为内部字段（需要更软就改下面这个默认值）
-  final double featherEase = 0.38; // 0.25–0.55，越大越“软”
+  final double featherEase = 0.45; // 0.25–0.55，越大越“软”
 
   @override
   Size get preferredSize => Size.fromHeight(height);
